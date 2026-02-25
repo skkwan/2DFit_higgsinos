@@ -42,7 +42,7 @@ met = ROOT.RooRealVar("met", "met", 0, 1200)
 weightXyear = ROOT.RooRealVar("weight_nominal_mm", "weight_nominal_mm", -1, 1)
 
 variablesInfo = [
-    ["mll", "m_{#ell#ell} / GeV", 40, 60., 120., mll],
+    ["mll", "m(ll) / GeV", 40, 60., 120., mll],
     ["met", "MET / GeV", 120, 0., 1200., met], 
     # ["weightXyear", "WeightXyear", 40, 0., 10.],
 ]
@@ -148,60 +148,76 @@ dPdf["signal"]["hist_met"]["name"] = "signal1Dproj_met"
 dPdf["signal"]["hist_met"]["linestyle"] = 1
 dPdf["signal"]["hist_met"]["ymax"] = 0.2
 
-# #Background fakemet model in met dimension
-# mu_fakemet_met = ROOT.RooRealVar('mu_fakemet_met', 'mu_fakemet_met', 22.2, 10, 30) 
-# mu_fakemet_met.setVal(22.1267)
-# b_fakemet_met = ROOT.RooRealVar('b_fakemet_met', 'b_fakemet_met', 12.2, 5, 30) 
-# b_fakemet_met.setVal(12.2339)
-# bkgfakemet_met = ROOT.RooGenericPdf("bkgfakemet_met", "bkgfakemet_met", "1/b_fakemet_met * exp(-(@0 - mu_fakemet_met)/b_fakemet_met - exp(-(@0 - mu_fakemet_met)/b_fakemet_met))",
-#                         ROOT.RooArgList(met, mu_fakemet_met, b_fakemet_met))  
-# #Background fakemet model in mll dimension
-# a_fakemet_mll = ROOT.RooRealVar("a_fakemet_mll", "a_fakemet_mll", -0.02, -1, 1) 
-# a_fakemet_mll.setVal(-0.020442)
-# bkgfakemet_mll = ROOT.RooExponential("bkgfakemet_mll", "bkgfakemet_mll", mll, a_fakemet_mll)
-# #Background 2d fakemet model: bkgfakemet_mll_met_2dpdf = bkgfakemet_met * bkgfakemet_mll
-# bkgfakemet_mll_met_2dpdf = ROOT.RooProdPdf("bkgfakemet_mll_met_2dpdf", "bkgfakemet_mll_met_2dpdf", [bkgfakemet_mll, bkgfakemet_met])
 
-# #Background realmet model in met dimension
-# mu_realmet_met = ROOT.RooRealVar('mu_realmet_met', 'mu_realmet_met', 50, 30, 100)  
-# mu_realmet_met.setVal(49.4322)
-# b_realmet_met = ROOT.RooRealVar('b_realmet_met', 'b_realmet_met', 29.6, 20, 40)   
-# b_realmet_met.setVal(29.5402)
-
-# bkgrealmet_met = ROOT.RooGenericPdf("bkgrealmet_met", "bkgrealmet_met", "1/b_realmet_met * exp(-(@0 - mu_realmet_met)/b_realmet_met - exp(-(@0 - mu_realmet_met)/b_realmet_met))",
-#                         ROOT.RooArgList(met, mu_realmet_met, b_realmet_met))  
-# #Background realmet model in mll dimension
-# a_realmet_mll = ROOT.RooRealVar("a_realmet_mll", "a_realmet_mll", -0.02, -1, 1) 
-# a_realmet_mll.setVal(-0.0206688)
-
-# bkgrealmet_mll = ROOT.RooExponential("bkgrealmet_mll", "bkgrealmet_mll", mll, a_realmet_mll)
-# #Background 2d realmet model: bkgrealmet_mll_met_2dpdf = bkgrealmet_met * bkgrealmet_mll
-# bkgrealmet_mll_met_2dpdf = ROOT.RooProdPdf("bkgrealmet_mll_met_2dpdf", "bkgrealmet_mll_met_2dpdf", [bkgrealmet_mll, bkgrealmet_met])
-
-# #Overall 2D bkg model: bkgtot_mll_met_2dpdf = bkgfakemet_mll_met_2dpdf + ratio_realmet * bkgrealmet_mll_met_2dpdf
-# ratio_realmet = ROOT.RooRealVar("ratio_realmet", "ratio_realmet", 0.44, 0, 1)
-# ratio_realmet.setVal(0.374335)
-# bkgtot_mll_met_2dpdf = ROOT.RooAddPdf("bkgtot_mll_met_2dpdf", "bkgtot_mll_met_2dpdf", [bkgrealmet_mll_met_2dpdf, bkgfakemet_mll_met_2dpdf], [ratio_realmet])
-
-# dPdf["bkg"] = {}
-# for varInfo in variablesInfo:
-#     dPdf["bkg"][f"hist_{varInfo[0]}"] = {} 
-# dPdf["bkg"]["hist_mll"]["var"] = mll
-# dPdf["bkg"]["hist_mll"]["pdf"] = bkgtot_mll_met_2dpdf
-# dPdf["bkg"]["hist_mll"]["color"] = ROOT.TColor.GetColor("#964a8b") # purple
-# dPdf["bkg"]["hist_mll"]["label"] = "Background 2D fit: 1D proj"
-# dPdf["bkg"]["hist_mll"]["name"] = "bkg1Dproj"
-# dPdf["bkg"]["hist_mll"]["linestyle"] = 1
-# dPdf["bkg"]["hist_mll"]["ymax"] = 40
+a_fakemll_mll     = 0.755871     +/-  1.30419   (limited)
+b_fakemll_met     = 28.9782      +/-  24.4727   (limited)
+b_realmll_met     = 40   +/-  0.480795  (limited)
+bkg_alphal_mll    = 1.67984      +/-  0.997158  (limited)
+bkg_alphar_mll    = 0.3251       +/-  0.687871  (limited)
+bkg_mean_mll      = 91.3098      +/-  0.0396237 (limited)
+bkg_nl_mll        = 0.0694016    +/-  0.123819  (limited)
+bkg_nr_mll        = 0.387898     +/-  0.358384  (limited)
+bkg_sigmal_mll    = 0.0100032    +/-  0.421628  (limited)
+bkg_sigmar_mll    = 0.0108922    +/-  0.174022  (limited)
+mu_fakemll_met    = 29.8716      +/-  19.3964   (limited)
+mu_realmll_met    = 100  +/-  1.59049   (limited)
+ratio_realmll     = 1    +/-  0.0433235 (limited)
 
 
-# dPdf["bkg"]["hist_met"]["var"] = met
-# dPdf["bkg"]["hist_met"]["pdf"] = bkgtot_mll_met_2dpdf
-# dPdf["bkg"]["hist_met"]["color"] = ROOT.TColor.GetColor("#964a8b") # purple
-# dPdf["bkg"]["hist_met"]["label"] = "Background 2D fit: 1D proj"
-# dPdf["bkg"]["hist_met"]["name"] = "bkg1Dproj"
-# dPdf["bkg"]["hist_met"]["linestyle"] = 1
-# dPdf["bkg"]["hist_met"]["ymax"] = 100
+#Background fakemet model in met dimension
+mu_fakemet_met = ROOT.RooRealVar('mu_fakemet_met', 'mu_fakemet_met', 22.2, 10, 30) 
+mu_fakemet_met.setVal(22.1267)
+b_fakemet_met = ROOT.RooRealVar('b_fakemet_met', 'b_fakemet_met', 12.2, 5, 30) 
+b_fakemet_met.setVal(12.2339)
+bkgfakemet_met = ROOT.RooGenericPdf("bkgfakemet_met", "bkgfakemet_met", "1/b_fakemet_met * exp(-(@0 - mu_fakemet_met)/b_fakemet_met - exp(-(@0 - mu_fakemet_met)/b_fakemet_met))",
+                        ROOT.RooArgList(met, mu_fakemet_met, b_fakemet_met))  
+#Background fakemet model in mll dimension
+a_fakemet_mll = ROOT.RooRealVar("a_fakemet_mll", "a_fakemet_mll", -0.02, -1, 1) 
+a_fakemet_mll.setVal(-0.020442)
+bkgfakemet_mll = ROOT.RooExponential("bkgfakemet_mll", "bkgfakemet_mll", mll, a_fakemet_mll)
+#Background 2d fakemet model: bkgfakemet_mll_met_2dpdf = bkgfakemet_met * bkgfakemet_mll
+bkgfakemet_mll_met_2dpdf = ROOT.RooProdPdf("bkgfakemet_mll_met_2dpdf", "bkgfakemet_mll_met_2dpdf", [bkgfakemet_mll, bkgfakemet_met])
+
+#Background realmet model in met dimension
+mu_realmet_met = ROOT.RooRealVar('mu_realmet_met', 'mu_realmet_met', 50, 30, 100)  
+mu_realmet_met.setVal(49.4322)
+b_realmet_met = ROOT.RooRealVar('b_realmet_met', 'b_realmet_met', 29.6, 20, 40)   
+b_realmet_met.setVal(29.5402)
+
+bkgrealmet_met = ROOT.RooGenericPdf("bkgrealmet_met", "bkgrealmet_met", "1/b_realmet_met * exp(-(@0 - mu_realmet_met)/b_realmet_met - exp(-(@0 - mu_realmet_met)/b_realmet_met))",
+                        ROOT.RooArgList(met, mu_realmet_met, b_realmet_met))  
+#Background realmet model in mll dimension
+a_realmet_mll = ROOT.RooRealVar("a_realmet_mll", "a_realmet_mll", -0.02, -1, 1) 
+a_realmet_mll.setVal(-0.0206688)
+
+bkgrealmet_mll = ROOT.RooExponential("bkgrealmet_mll", "bkgrealmet_mll", mll, a_realmet_mll)
+#Background 2d realmet model: bkgrealmet_mll_met_2dpdf = bkgrealmet_met * bkgrealmet_mll
+bkgrealmet_mll_met_2dpdf = ROOT.RooProdPdf("bkgrealmet_mll_met_2dpdf", "bkgrealmet_mll_met_2dpdf", [bkgrealmet_mll, bkgrealmet_met])
+
+#Overall 2D bkg model: bkgtot_mll_met_2dpdf = bkgfakemet_mll_met_2dpdf + ratio_realmet * bkgrealmet_mll_met_2dpdf
+ratio_realmet = ROOT.RooRealVar("ratio_realmet", "ratio_realmet", 0.44, 0, 1)
+ratio_realmet.setVal(0.374335)
+bkgtot_mll_met_2dpdf = ROOT.RooAddPdf("bkgtot_mll_met_2dpdf", "bkgtot_mll_met_2dpdf", [bkgrealmet_mll_met_2dpdf, bkgfakemet_mll_met_2dpdf], [ratio_realmet])
+
+dPdf["bkg"] = {}
+for varInfo in variablesInfo:
+    dPdf["bkg"][f"hist_{varInfo[0]}"] = {} 
+dPdf["bkg"]["hist_mll"]["var"] = mll
+dPdf["bkg"]["hist_mll"]["pdf"] = bkgtot_mll_met_2dpdf
+dPdf["bkg"]["hist_mll"]["color"] = ROOT.TColor.GetColor("#964a8b") # purple
+dPdf["bkg"]["hist_mll"]["label"] = "Background 2D fit: 1D proj"
+dPdf["bkg"]["hist_mll"]["name"] = "bkg1Dproj"
+dPdf["bkg"]["hist_mll"]["linestyle"] = 1
+dPdf["bkg"]["hist_mll"]["ymax"] = 40
+
+
+dPdf["bkg"]["hist_met"]["var"] = met
+dPdf["bkg"]["hist_met"]["pdf"] = bkgtot_mll_met_2dpdf
+dPdf["bkg"]["hist_met"]["color"] = ROOT.TColor.GetColor("#964a8b") # purple
+dPdf["bkg"]["hist_met"]["label"] = "Background 2D fit: 1D proj"
+dPdf["bkg"]["hist_met"]["name"] = "bkg1Dproj"
+dPdf["bkg"]["hist_met"]["linestyle"] = 1
+dPdf["bkg"]["hist_met"]["ymax"] = 100
 
 for varInfo in variablesInfo:
     variable = varInfo[0]
