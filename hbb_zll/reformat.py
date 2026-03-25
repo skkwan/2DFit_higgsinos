@@ -23,24 +23,6 @@ samples = {
         "ttbar": [
             "TTTo2L2Nu",
             ],
-        "data_obs": [
-            "DoubleMuon_Run2018A",
-            "DoubleMuon_Run2018B",
-            "DoubleMuon_Run2018C",
-            "DoubleMuon_Run2018D",
-            "EGamma_Run2018A",
-            "EGamma_Run2018B",
-            "EGamma_Run2018C",
-            "EGamma_Run2018D",
-			# MuonEG is overwritten in histConsolidation.py
-			# "MuonEG_Run2018A",
-			# "MuonEG_Run2018B",
-        	# "MuonEG_Run2018C",
-        	# "MuonEG_Run2018D",
-        ],  
-        "TTZ": [
-            "TTZToLLNuNu_M-10",
-        ],
 		"TTZ_peak": [
 			"TTZToLLNuNu_M-10_peak_mll",
 		],
@@ -66,7 +48,6 @@ samples = {
             "WWTo2L2Nu",
         ],
         "ZZ": [
-			# "ZZ",
             "ZZTo2L2Nu",
             "ZZTo2Q2L",
             "ZZTo2Q2Nu",
@@ -95,4 +76,5 @@ for b in bkg_list:
     hadd_cmd += f" {b}"
 
 print(hadd_cmd)
-print(">>>> Command not executed, copy and paste and run the above command")
+# print(">>>> Command not executed, copy and paste and run the above command")
+os.system(hadd_cmd)
