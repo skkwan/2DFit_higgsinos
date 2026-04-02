@@ -1,6 +1,7 @@
 import os, ROOT
 import cmsstyle as CMS
 
+doLog = True
 
 def addOverflow(h: ROOT.TH1F) -> ROOT.TH1F:
     """
@@ -42,7 +43,7 @@ met = ROOT.RooRealVar("met", "met", 0, 1200)
 weightXyear = ROOT.RooRealVar("weight_nominal_mm", "weight_nominal_mm", -1, 1)
 
 variablesInfo = [
-    ["mll", "m(ll) / GeV", 40, 60., 120., mll],
+    ["mll", "m(ll) / GeV", 60, 60., 120., mll],
     ["met", "MET / GeV", 120, 0., 1200., met], 
     # ["weightXyear", "WeightXyear", 40, 0., 10.],
 ]
@@ -58,7 +59,7 @@ sigdataset = ROOT.RooDataSet("sigdataset", "sigdataset", variables, ROOT.RooFit.
 crfilepath = 'backgrounds.root'
 crfile = ROOT.TFile.Open(crfilepath, "READ")
 crtree = crfile.Get("event_tree")
-variables = ROOT.RooArgSet(mll, met)
+variables = ROOT.RooArgSet(mll, met, weightXyear)
 bkgdataset = ROOT.RooDataSet("bkgdataset", "bkgdataset", variables, ROOT.RooFit.Import(crtree), ROOT.RooFit.WeightVar(weightXyear))
 
 
@@ -98,33 +99,34 @@ d["bkg"]["name"] = "background"
 # sigmal_mll        = 2.20338      +/-  6.86993   (limited)
 # sigmar_mll        = 2.40557      +/-  5.56478   (limited)
 
-## OLD: sigmoid for signal met
-a_met = ROOT.RooRealVar('a_met', 'a_met', 10, 0, 3000)
-b_met = ROOT.RooRealVar('b_met', 'b_met', 10, 0, 1000)  
-c_met = ROOT.RooRealVar('c_met', 'c_met', 0.5, 0, 1000)  
-e_met = ROOT.RooRealVar('e_met', 'e_met', 1, 0.2, 100) 
-a_met.setVal(565.321)
-b_met.setVal(49.9658)
-c_met.setVal(1.19365e-05)
-e_met.setVal(0.988535)
-sig_smoid_met = ROOT.RooGenericPdf('sig_smoid_met', '(1-exp(-c_met*met))/(1 + exp((met^e_met-a_met)/b_met))', ROOT.RooArgList(met, a_met, b_met, c_met, e_met))
+# ## OLD: sigmoid for signal met
+# a_met = ROOT.RooRealVar('a_met', 'a_met', 10, 0, 3000)
+# b_met = ROOT.RooRealVar('b_met', 'b_met', 10, 0, 1000)  
+# c_met = ROOT.RooRealVar('c_met', 'c_met', 0.5, 0, 1000)  
+# e_met = ROOT.RooRealVar('e_met', 'e_met', 1, 0.2, 100) 
+# a_met.setVal(565.321)
+# b_met.setVal(49.9658) 
+# c_met.setVal(1.19365e-05)
+# e_met.setVal(0.988535)
+# sig_smoid_met = ROOT.RooGenericPdf('sig_smoid_met', '(1-exp(-c_met*met))/(1 + exp((met^e_met-a_met)/b_met))', ROOT.RooArgList(met, a_met, b_met, c_met, e_met))
+
 
 ### NEW TEST: DCB for signal met
-# mean_met = ROOT.RooRealVar("mean_met", "mean_met", 400, 0, 1200)
-# sigmal_met = ROOT.RooRealVar("sigmal_met", "sigmal_met", 2, 0.01, 10)
-# sigmar_met = ROOT.RooRealVar("sigmar_met", "sigmar_met", 2, 0.01, 10)
-# alphal_met = ROOT.RooRealVar("alphal_met","alphal_met", 4, 0.01, 10)
-# nl_met = ROOT.RooRealVar("nl_met", "nl_met", 100, 10, 200)
-# alphar_met = ROOT.RooRealVar("alphar_met","alphar_met", 5, 0.01, 10)
-# nr_met = ROOT.RooRealVar("nr_met", "nr_met", 100, 10, 200)
-# mean_met.setVal(379)
-# sigmal_met.setVal(6.5001)
-# sigmar_met.setVal(4.91442)
-# alphal_met.setVal(0.105149)
-# alphar_met.setVal(0.0342216)
-# nl_met.setVal(11.1361)
-# nr_met.setVal(38.5208)
-# sig_dcb_met = ROOT.RooCrystalBall("sig_dcb_met", "sig_dcb_met", met, mean_met, sigmal_met, sigmar_met, alphal_met, nl_met, alphar_met, nr_met)
+mean_met = ROOT.RooRealVar("mean_met", "mean_met", 400, 0, 1200)
+sigmal_met = ROOT.RooRealVar("sigmal_met", "sigmal_met", 2, 0.01, 10)
+sigmar_met = ROOT.RooRealVar("sigmar_met", "sigmar_met", 2, 0.01, 10)
+alphal_met = ROOT.RooRealVar("alphal_met","alphal_met", 4, 0.01, 10)
+nl_met = ROOT.RooRealVar("nl_met", "nl_met", 100, 1, 100)
+alphar_met = ROOT.RooRealVar("alphar_met","alphar_met", 5, 0.01, 10)
+nr_met = ROOT.RooRealVar("nr_met", "nr_met", 100, 1, 100)
+mean_met.setVal(379)
+sigmal_met.setVal(1)
+sigmar_met.setVal(1)
+alphal_met.setVal(0.105149)
+alphar_met.setVal(0.0342216)
+nl_met.setVal(5)
+nr_met.setVal(5)
+sig_dcb_met = ROOT.RooCrystalBall("sig_dcb_met", "sig_dcb_met", met, mean_met, sigmal_met, sigmar_met, alphal_met, nl_met, alphar_met, nr_met)
 
 
 mean_mll = ROOT.RooRealVar("mean_mll", "mean_mll", 90, 85, 95)
@@ -147,7 +149,7 @@ sig_dcb_mll = ROOT.RooCrystalBall("sig_dcb_mll", "sig_dcb_mll", mll, mean_mll, s
 #Signal 2D model: sigtot_mll_met_2dpdf = sig_smoid_met * sig_dcb_mll
 # TODO: testing DCB for signal met instead of sigmoid
 # sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_moid_met", "sigtot_dcb_mll_moid_met", [sig_dcb_mll, sig_smoid_met])
-sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_dcb_met", "sigtot_dcb_mll_dcb_met", [sig_dcb_mll, sig_smoid_met])
+sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_dcb_met", "sigtot_dcb_mll_dcb_met", [sig_dcb_mll, sig_dcb_met])
 
 # Fill dPdf by hand 
 dPdf["signal"] = {}
@@ -278,17 +280,28 @@ for varInfo in variablesInfo:
         # Each variable only needs one frame
         frame = rooVar.frame(40)
 
+
         print("Doing", key)
         leg = CMS.cmsLeg(legXmin, legYmin, legXmax, legYmax, textSize=0.03)
         leg.SetHeader("Z(ll)H(bb): results of 2D fit")
 
         CMS.SetLumi("")
 
+        y_min = 0
+        y_max = dPdf[key][f"hist_{variable}"]["ymax"]
+        if doLog:
+            y_min = 1e-10
+            y_max = y_max * 1000
         # print(y_maxima)
-        canv = CMS.cmsCanvas(variable, xmin, xmax, 0, dPdf[key][f"hist_{variable}"]["ymax"], # max(y_maxima) * 1.25,
+        # example: https://cms-analysis.docs.cern.ch/guidelines/plotting/examples/?h=pad#stack-plot-with-cmsstyle
+        # documentation: https://cmsstyle.readthedocs.io/en/latest/reference/#cmsstyle.cmsstyle.cmsDiCanvas
+        canv = CMS.cmsDiCanvas(variable, x_min=xmin, x_max=xmax, y_min=y_min, y_max=y_max, # max(y_maxima) * 1.25,
+                            r_min=0,
+                            r_max=2,
                             nameXaxis = xlabel,
                             nameYaxis = 'Shape (A.U.)',
-                            square = CMS.kSquare, extraSpace=0.05, yTitOffset=1.6, iPos=0)
+                            nameRatio = 'MC/Pred',
+                            square = CMS.kSquare,  iPos=0) # yTitOffset=1.6,  # extraSpace=0.05,
         canv.SetRightMargin(0.05)
         # CMS.SetExtraText("Private work (CMS simulation)")
         # CMS.SetCmsTextFont(52)
@@ -298,12 +311,20 @@ for varInfo in variablesInfo:
         y_maxima = []
 
         # Plot the dataset fitted
+        canv.cd(1)
+        if doLog:
+            ROOT.gPad.SetLogy()
 
+        CMS.UpdatePad(canv)
         d[key]["dataset"].plotOn(frame, ROOT.RooFit.Name(d[key]["name"]),
                                     ROOT.RooFit.LineColor(d[key]["color"]),
                                     ROOT.RooFit.LineWidth(d[key]["linewidth"]),
                                     ROOT.RooFit.MarkerColor(d[key]["color"]),
                                     ROOT.RooFit.MarkerSize(1))
+        # Hodgepodge of arguments
+        d[key][f"hist_{variable}"] = {}
+        d[key][f"hist_{variable}"]["var"] = dPdf[key][f"hist_{variable}"]["var"] # copy from dPdf
+        d[key][f"hist_{variable}"]["obj"] = d[key]["dataset"].createHistogram("histo", d[key][f"hist_{variable}"]["var"], ROOT.RooFit.Binning(nBins, xmin, xmax))
         leg.AddEntry(frame.findObject(d[key]["name"]), d[key]["label"])
 
         # Plot the PDF with the fitted parameters
@@ -314,9 +335,36 @@ for varInfo in variablesInfo:
                                                     ROOT.RooFit.LineWidth(2),
                                                     ROOT.RooFit.LineStyle(dPdf[key][f"hist_{variable}"]["linestyle"]),
                                                     ROOT.RooFit.MarkerSize(0))
+        dPdf[key][f"hist_{variable}"]["RooCurve"] = frame.getCurve(dPdf[key][f"hist_{variable}"]["name"])
         leg.AddEntry(frame.findObject(dPdf[key][f"hist_{variable}"]["name"]), dPdf[key][f"hist_{variable}"]["label"])
         frame.Draw("SAME")
 
+        # Ratio plot
+        canv.cd(2)
+        data_ratio = d[key][f"hist_{variable}"]["obj"].Clone()
+        prediction = d[key][f"hist_{variable}"]["obj"].Clone()
+        # At each point in the TH1F, we need to evaluate the pdf value 
+        for i in range(1, prediction.GetNbinsX() + 1):
+            thisXval = prediction.GetXaxis().GetBinCenter(i)
+            thisArgSet = ROOT.RooArgSet(mll, met, weightXyear)
+            thisArgSet.setRealValue(variable, thisXval)
+
+            curve = dPdf[key][f"hist_{variable}"]["RooCurve"]
+            fitY = curve.interpolate(thisXval, tolerance=1)
+            # fitX = curve.GetPointX(thisPoint)
+            # fitY = curve.GetPointY(thisPoint)
+            print(f"Setting {variable} to {thisXval}")
+
+            print(f"{variable}: From {thisXval}: at point {thisXval}, {fitY}, compare to data point {thisXval}, {prediction.GetBinContent(i)}")
+            prediction.SetBinContent(i, fitY)
+
+        data_ratio.Divide(prediction)
+        CMS.cmsObjectDraw(data_ratio, "E", MarkerStyle=ROOT.kFullCircle)
+        unitLine = ROOT.TLine(xmin, 1.0, xmax, 1.0)
+        unitLine.SetLineColor(ROOT.kBlack)
+        unitLine.SetLineWidth(1)
+        unitLine.Draw("SAME")
+        canv.cd(1)
         CMS.cmsObjectDraw(leg)
 
         CMS.UpdatePad(canv)

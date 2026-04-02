@@ -9,7 +9,7 @@ met = ROOT.RooRealVar("met", "met", 0, 1200)
 
 # # ##### SIGNAL FIT to signal MC file ######
 
-#Signal 1d met model. Formerly sigmoid in Meraj's notebook, we try a DCB
+#Signal 1d met model. Formerly sigmoid in Meraj's notebook, we try a DCB and also a Gamma
 a_met = ROOT.RooRealVar('a_met', 'a_met', 10, 0, 3000)
 b_met = ROOT.RooRealVar('b_met', 'b_met', 10, 0, 1000)  
 c_met = ROOT.RooRealVar('c_met', 'c_met', 0.5, 0, 1000)  
@@ -25,7 +25,12 @@ sig_smoid_met = ROOT.RooGenericPdf('sig_smoid_met', '(1-exp(-c_met*met))/(1 + ex
 # nr_met = ROOT.RooRealVar("nr_met", "nr_met", 100, 10, 200)
 # sig_dcb_met = ROOT.RooCrystalBall("sig_dcb_met", "sig_dcb_met", met, mean_met, sigmal_met, sigmar_met, alphal_met, nl_met, alphar_met, nr_met)
 
-# sig_gaussian_met = ROOT.Gaussian("sig_gaussian_met", "sig_gaussian_met", mll, mean)
+
+# https://root.cern.ch/doc/v638/classRooGamma.html
+gamma_met = ROOT.RooRealVar("gamma_met", "gamma_met", 200, 10, 500) # gamma in ROOT = alpha on wikipedia
+beta_met = ROOT.RooRealVar("beta_met", "beta_met", 1.0, 0.5, 2.5) # wikipedia: beta = 0.5 to 1.0, beta in wikipedia = (1/beta) in ROOT, so 
+mu_met = ROOT.RooRealVar("mu_met", "mu_met", 0, 0, 1)
+sig_gamma_met = ROOT.RooGamma("sig_gamma_met", "sig_gamma_met", met, gamma_met, beta_met, mu_met)
 
 #Signal 1d mll model
 mean_mll = ROOT.RooRealVar("mean_mll", "mean_mll", 90, 85, 95)
@@ -38,7 +43,7 @@ nr_mll = ROOT.RooRealVar("nr_mll", "nr_mll", 0.01, 0.01, 100)
 sig_dcb_mll = ROOT.RooCrystalBall("sig_dcb_mll", "sig_dcb_mll", mll, mean_mll, sigmal_mll, sigmar_mll, alphal_mll, nl_mll, alphar_mll, nr_mll)
 
 #Signal 2D model: sigtot_mll_met_2dpdf = sig_smoid_met * sig_dcb_mll TODO: testing sig_dcb_met instead of sig_dcb_mll
-sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_moid_met", "sigtot_dcb_mll_moid_met", [sig_dcb_mll, sig_smoid_met])
+sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_moid_met", "sigtot_dcb_mll_moid_met", [sig_dcb_mll, sig_gamma_met])
 
 ###### Retrieve signal datasset from signal root file 
 sigfilepath = 'snapshot_TChiZH_650_1_cat_0_batch_0_channel_mm_SR_mll_MET_fit_scheme.root'
