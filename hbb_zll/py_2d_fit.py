@@ -7,6 +7,16 @@ from ROOT import RooFit as RF
 mll = ROOT.RooRealVar("m_ll", "m_ll", 60, 120) 
 met = ROOT.RooRealVar("met", "met", 0, 1200)
 
+
+###### Retrieve signal dataset from signal root file 
+sigfilepath = 'snapshot_TChiZH_650_1_cat_0_batch_0_channel_mm_SR_mll_MET_fit_scheme.root'
+sigfile = ROOT.TFile.Open(sigfilepath, "READ")
+sigtree = sigfile.Get("event_tree")
+weightXyear = ROOT.RooRealVar("weight_nominal_mm", "weight_nominal_mm", -1, 1)
+variables = ROOT.RooArgSet(mll, met, weightXyear)
+sigdataset = ROOT.RooDataSet("sigdataset", "sigdataset", variables, ROOT.RooFit.Import(sigtree), ROOT.RooFit.WeightVar(weightXyear))
+
+
 # # ##### SIGNAL FIT to signal MC file ######
 
 #Signal 1d met model. Formerly sigmoid in Meraj's notebook, we try a DCB and also a Gamma
@@ -15,16 +25,30 @@ b_met = ROOT.RooRealVar('b_met', 'b_met', 10, 0, 1000)
 c_met = ROOT.RooRealVar('c_met', 'c_met', 0.5, 0, 1000)  
 e_met = ROOT.RooRealVar('e_met', 'e_met', 1, 0.2, 100) 
 sig_smoid_met = ROOT.RooGenericPdf('sig_smoid_met', '(1-exp(-c_met*met))/(1 + exp((met^e_met-a_met)/b_met))', ROOT.RooArgList(met, a_met, b_met, c_met, e_met))
-# # TODO: testing DCB for signal met
-# mean_met = ROOT.RooRealVar("mean_met", "mean_met", 400, 0, 1200)
-# sigmal_met = ROOT.RooRealVar("sigmal_met", "sigmal_met", 2, 0.01, 10)
-# sigmar_met = ROOT.RooRealVar("sigmar_met", "sigmar_met", 2, 0.01, 10)
-# alphal_met = ROOT.RooRealVar("alphal_met","alphal_met", 4, 0.01, 10)
-# nl_met = ROOT.RooRealVar("nl_met", "nl_met", 100, 10, 200)
-# alphar_met = ROOT.RooRealVar("alphar_met","alphar_met", 5, 0.01, 10)
-# nr_met = ROOT.RooRealVar("nr_met", "nr_met", 100, 10, 200)
-# sig_dcb_met = ROOT.RooCrystalBall("sig_dcb_met", "sig_dcb_met", met, mean_met, sigmal_met, sigmar_met, alphal_met, nl_met, alphar_met, nr_met)
 
+# Get TH1 of signal met: https://github.com/guitargeek/hasco-2023-root/blob/main/notebooks/roofit-tutorial-01.ipynb 
+sig_met_hist = ROOT.TH1D("sig_met_hist", "sig_met_hist", 120, 0, 1200)
+sigtree.Draw("met >> sig_met_hist")
+# Convert TH1 into RooDataHist
+sig_roo_template_hist = ROOT.RooDataHist("sig_roo_template_hist", "sig_roo_template_hist", met, sig_met_hist)
+# Create a RooHistPdf based on the RooFit histogram
+sig_roohistpdf_met = ROOT.RooHistPdf("sig_roohistpdf_met", "sig_roohistpdf_met", met, sig_roo_template_hist, intOrder=0)
+
+# sig_gumbel_met = ROOT.RooGenericPdf('sig_gumbel_met', '(1/beta_met) *  exp( ((met - alpha_met)/beta_met) - exp((met - alpha_met)/beta_met) ) ', ROOT.RooArgList(met, alpha_met, beta_met))
+
+
+# Load the TH1 into here
+
+
+# TODO: testing DCB for signal met
+# mean_met = ROOT.RooRealVar("mean_met", "mean_met", 400, 300, 500)
+# sigmal_met = ROOT.RooRealVar("sigmal_met", "sigmal_met", 80, 30, 200)
+# sigmar_met = ROOT.RooRealVar("sigmar_met", "sigmar_met", 2, 0.5, 10)
+# alphal_met = ROOT.RooRealVar("alphal_met","alphal_met", 4, 0.01, 10)
+# nl_met = ROOT.RooRealVar("nl_met", "nl_met", 3, 1, 10)
+# alphar_met = ROOT.RooRealVar("alphar_met","alphar_met", 5, 0.01, 10)
+# nr_met = ROOT.RooRealVar("nr_met", "nr_met", 3, 1, 10)
+# sig_dcb_met = ROOT.RooCrystalBall("sig_dcb_met", "sig_dcb_met", met, mean_met, sigmal_met, sigmar_met, alphal_met, nl_met, alphar_met, nr_met)
 
 # https://root.cern.ch/doc/v638/classRooGamma.html
 gamma_met = ROOT.RooRealVar("gamma_met", "gamma_met", 200, 10, 500) # gamma in ROOT = alpha on wikipedia
@@ -43,19 +67,11 @@ nr_mll = ROOT.RooRealVar("nr_mll", "nr_mll", 0.01, 0.01, 100)
 sig_dcb_mll = ROOT.RooCrystalBall("sig_dcb_mll", "sig_dcb_mll", mll, mean_mll, sigmal_mll, sigmar_mll, alphal_mll, nl_mll, alphar_mll, nr_mll)
 
 #Signal 2D model: sigtot_mll_met_2dpdf = sig_smoid_met * sig_dcb_mll TODO: testing sig_dcb_met instead of sig_dcb_mll
-sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_moid_met", "sigtot_dcb_mll_moid_met", [sig_dcb_mll, sig_gamma_met])
-
-###### Retrieve signal datasset from signal root file 
-sigfilepath = 'snapshot_TChiZH_650_1_cat_0_batch_0_channel_mm_SR_mll_MET_fit_scheme.root'
-sigfile = ROOT.TFile.Open(sigfilepath, "READ")
-sigtree = sigfile.Get("event_tree")
-weightXyear = ROOT.RooRealVar("weight_nominal_mm", "weight_nominal_mm", -1, 1)
-variables = ROOT.RooArgSet(mll, met, weightXyear)
-sigdataset = ROOT.RooDataSet("sigdataset", "sigdataset", variables, ROOT.RooFit.Import(sigtree), ROOT.RooFit.WeightVar(weightXyear))
+sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_histpdf_met", "sigtot_dcb_mll_histpdf_met", [sig_dcb_mll, sig_roohistpdf_met])
 
 ###### 2D signal fit 
-result = sigtot_mll_met_2dpdf.fitTo(sigdataset, RF.Save()) #where dataset is RooDataSet
-params = result.floatParsFinal()
+signal_result = sigtot_mll_met_2dpdf.fitTo(sigdataset, RF.Save(), SumW2Error=True) #where dataset is RooDataSet
+params = signal_result.floatParsFinal()
 
 print(params)
 
@@ -104,6 +120,16 @@ weight = ROOT.RooRealVar("weight_nominal_mm", "weight_nominal_mm", -1, 1)
 crdataset = ROOT.RooDataSet("crdataset", "crdataset", variables, ROOT.RooFit.Import(crtree), ROOT.RooFit.WeightVar(weight))
 
 ### B only 2D fit to cr root file
-result = bkgtot_mll_met_2dpdf.fitTo(crdataset, RF.Save()) #where dataset is RooDataSet
-params = result.floatParsFinal()
+bkg_result = bkgtot_mll_met_2dpdf.fitTo(crdataset, RF.Save(), SumW2Error=True) #where dataset is RooDataSet
+params = bkg_result.floatParsFinal()
+print(params)
+
+w = ROOT.RooWorkspace("workspace", "workspace")
+w.Import(sig_roohistpdf_met)
+
+f = ROOT.TFile("fitresult.root", "RECREATE")
+signal_result.Write("signal_result")
+bkg_result.Write("bkg_result")
+w.Write()
+f.Close()
 

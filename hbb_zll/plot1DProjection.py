@@ -1,7 +1,7 @@
 import os, ROOT
 import cmsstyle as CMS
 
-doLog = True
+doLog = False
 
 def addOverflow(h: ROOT.TH1F) -> ROOT.TH1F:
     """
@@ -44,9 +44,14 @@ weightXyear = ROOT.RooRealVar("weight_nominal_mm", "weight_nominal_mm", -1, 1)
 
 variablesInfo = [
     ["mll", "m(ll) / GeV", 60, 60., 120., mll],
-    ["met", "MET / GeV", 120, 0., 1200., met], 
+    ["met", "MET / GeV", 60, 0., 1200., met], 
     # ["weightXyear", "WeightXyear", 40, 0., 10.],
 ]
+
+resultsfile = ROOT.TFile.Open("fitresult.root", "READ")
+workspace = resultsfile.Get("workspace")
+signal_results = resultsfile.Get("signal_result")
+bkg_results = resultsfile.Get("bkg_result")
 
 ##### Retrieve signal datasset from signal root file 
 sigfilepath = 'snapshot_TChiZH_650_1_cat_0_batch_0_channel_mm_SR_mll_MET_fit_scheme.root'
@@ -87,69 +92,21 @@ d["bkg"]["linewidth"] = 2
 d["bkg"]["dataset"] = bkgdataset 
 d["bkg"]["name"] = "background"
 
-# a_met     = 565.321      +/-  1759.26   (limited)
-# alphal_mll        = 1.21829      +/-  6.15304   (limited)
-# alphar_mll        = 1.16314      +/-  7.52947   (limited)
-# b_met     = 49.9658      +/-  148.592   (limited)
-# c_met     = 1.19365e-05  +/-  0.0199096 (limited)
-# e_met     = 0.988535     +/-  0.371576  (limited)
-# mean_mll          = 90.6656      +/-  7.09258   (limited)
-# nl_mll    = 2.35992      +/-  21.0617   (limited)
-# nr_mll    = 3.21394      +/-  89.8507   (limited)
-# sigmal_mll        = 2.20338      +/-  6.86993   (limited)
-# sigmar_mll        = 2.40557      +/-  5.56478   (limited)
 
-# ## OLD: sigmoid for signal met
-# a_met = ROOT.RooRealVar('a_met', 'a_met', 10, 0, 3000)
-# b_met = ROOT.RooRealVar('b_met', 'b_met', 10, 0, 1000)  
-# c_met = ROOT.RooRealVar('c_met', 'c_met', 0.5, 0, 1000)  
-# e_met = ROOT.RooRealVar('e_met', 'e_met', 1, 0.2, 100) 
-# a_met.setVal(565.321)
-# b_met.setVal(49.9658) 
-# c_met.setVal(1.19365e-05)
-# e_met.setVal(0.988535)
-# sig_smoid_met = ROOT.RooGenericPdf('sig_smoid_met', '(1-exp(-c_met*met))/(1 + exp((met^e_met-a_met)/b_met))', ROOT.RooArgList(met, a_met, b_met, c_met, e_met))
+mean_mll = signal_results.floatParsFinal().find("mean_mll")
+sigmal_mll = signal_results.floatParsFinal().find("sigmal_mll")
+sigmar_mll = signal_results.floatParsFinal().find("sigmar_mll")
+alphal_mll = signal_results.floatParsFinal().find("alphal_mll")
+alphar_mll = signal_results.floatParsFinal().find("alphar_mll")
+nl_mll = signal_results.floatParsFinal().find("nl_mll")
+nr_mll = signal_results.floatParsFinal().find("nr_mll")
+mypdf = workspace.pdf("sig_roohistpdf_met")
+print("mypdf:", mypdf)
 
-
-### NEW TEST: DCB for signal met
-mean_met = ROOT.RooRealVar("mean_met", "mean_met", 400, 0, 1200)
-sigmal_met = ROOT.RooRealVar("sigmal_met", "sigmal_met", 2, 0.01, 10)
-sigmar_met = ROOT.RooRealVar("sigmar_met", "sigmar_met", 2, 0.01, 10)
-alphal_met = ROOT.RooRealVar("alphal_met","alphal_met", 4, 0.01, 10)
-nl_met = ROOT.RooRealVar("nl_met", "nl_met", 100, 1, 100)
-alphar_met = ROOT.RooRealVar("alphar_met","alphar_met", 5, 0.01, 10)
-nr_met = ROOT.RooRealVar("nr_met", "nr_met", 100, 1, 100)
-mean_met.setVal(379)
-sigmal_met.setVal(1)
-sigmar_met.setVal(1)
-alphal_met.setVal(0.105149)
-alphar_met.setVal(0.0342216)
-nl_met.setVal(5)
-nr_met.setVal(5)
-sig_dcb_met = ROOT.RooCrystalBall("sig_dcb_met", "sig_dcb_met", met, mean_met, sigmal_met, sigmar_met, alphal_met, nl_met, alphar_met, nr_met)
-
-
-mean_mll = ROOT.RooRealVar("mean_mll", "mean_mll", 90, 85, 95)
-sigmal_mll = ROOT.RooRealVar("sigmal_mll", "sigmal_mll", 2, 0.01, 10)
-sigmar_mll = ROOT.RooRealVar("sigmar_mll", "sigmar_mll", 2, 0.01, 10)
-alphal_mll = ROOT.RooRealVar("alphal_mll","alphal_mll", 4, 0.01, 10)
-nl_mll = ROOT.RooRealVar("nl_mll", "nl_mll", 2, 0.01, 100)
-alphar_mll = ROOT.RooRealVar("alphar_mll","alphar_mll", 5, 0.01, 10)
-nr_mll = ROOT.RooRealVar("nr_mll", "nr_mll", 0.01, 0.01, 100)
-
-mean_mll.setVal(90.6656)
-sigmal_mll.setVal(2.20339)
-sigmar_mll.setVal(2.40555)
-alphal_mll.setVal(1.21829)
-alphar_mll.setVal(1.16313)
-nl_mll.setVal(2.35992)
-nr_mll.setVal(3.21394)
 sig_dcb_mll = ROOT.RooCrystalBall("sig_dcb_mll", "sig_dcb_mll", mll, mean_mll, sigmal_mll, sigmar_mll, alphal_mll, nl_mll, alphar_mll, nr_mll)
 
 #Signal 2D model: sigtot_mll_met_2dpdf = sig_smoid_met * sig_dcb_mll
-# TODO: testing DCB for signal met instead of sigmoid
-# sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_moid_met", "sigtot_dcb_mll_moid_met", [sig_dcb_mll, sig_smoid_met])
-sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_dcb_met", "sigtot_dcb_mll_dcb_met", [sig_dcb_mll, sig_dcb_met])
+sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_dcb_met", "sigtot_dcb_mll_dcb_met", [sig_dcb_mll, mypdf])
 
 # Fill dPdf by hand 
 dPdf["signal"] = {}
@@ -171,70 +128,42 @@ dPdf["signal"]["hist_met"]["name"] = "signal1Dproj_met"
 dPdf["signal"]["hist_met"]["linestyle"] = 1
 dPdf["signal"]["hist_met"]["ymax"] = 0.4
 
-
-# a_fakemll_mll     = 0.755871     +/-  1.30419   (limited)
-# b_fakemll_met     = 28.9782      +/-  24.4727   (limited)
-# b_realmll_met     = 40   +/-  0.480795  (limited)
-# bkg_alphal_mll    = 1.67984      +/-  0.997158  (limited)
-# bkg_alphar_mll    = 0.3251       +/-  0.687871  (limited)
-# bkg_mean_mll      = 91.3098      +/-  0.0396237 (limited)
-# bkg_nl_mll        = 0.0694016    +/-  0.123819  (limited)
-# bkg_nr_mll        = 0.387898     +/-  0.358384  (limited)
-# bkg_sigmal_mll    = 0.0100032    +/-  0.421628  (limited)
-# bkg_sigmar_mll    = 0.0108922    +/-  0.174022  (limited)
-# mu_fakemll_met    = 29.8716      +/-  19.3964   (limited)
-# mu_realmll_met    = 100  +/-  1.59049   (limited)
-# ratio_realmll     = 1    +/-  0.0433235 (limited)
-
-
 #Background real mll model in met dimension
-mu_fakemll_met = ROOT.RooRealVar('mu_fakemll_met', 'mu_fakemll_met', 210, 10, 400) 
-mu_fakemll_met.setVal(242.523) # by-hand 225
-b_fakemll_met = ROOT.RooRealVar('b_fakemll_met', 'b_fakemll_met', 12.2, 5, 60) 
-b_fakemll_met.setVal(36.6516) # by-hand 40 
+mu_fakemll_met = bkg_results.floatParsFinal().find("mu_fakemll_met")
+b_fakemll_met = bkg_results.floatParsFinal().find("b_fakemll_met")
 bkgfakemll_met = ROOT.RooGenericPdf("bkgfakemll_met", "bkgfakemll_met", "1/b_fakemll_met * exp(-(@0 - mu_fakemll_met)/b_fakemll_met - exp(-(@0 - mu_fakemll_met)/b_fakemll_met))",
                         ROOT.RooArgList(met, mu_fakemll_met, b_fakemll_met))  
 #Background fakemll model in mll dimension
-a_fakemll_mll = ROOT.RooRealVar("a_fakemll_mll", "a_fakemll_mll", -0.03, -1, 1) 
-a_fakemll_mll.setVal(-0.0210225) # -0.03 by hand
+a_fakemll_mll = bkg_results.floatParsFinal().find("a_fakemll_mll")
 bkgfakemll_mll = ROOT.RooExponential("bkgfakemll_mll", "bkgfakemll_mll", mll, a_fakemll_mll)
 #Background 2d fakemll model: bkgfakemll_mll_met_2dpdf = bkgfakemll_met * bkgfakemll_mll
 bkgfakemll_mll_met_2dpdf = ROOT.RooProdPdf("bkgfakemll_mll_met_2dpdf", "bkgfakemll_mll_met_2dpdf", [bkgfakemll_mll, bkgfakemll_met])
 
 #Background realmll model in met dimension
-mu_realmll_met = ROOT.RooRealVar('mu_realmll_met', 'mu_realmll_met', 50, 30, 400)  
-mu_realmll_met.setVal(246.411)
-b_realmll_met = ROOT.RooRealVar('b_realmll_met', 'b_realmll_met', 29.6, 20, 100)   
-b_realmll_met.setVal(41.1751)
+mu_realmll_met = bkg_results.floatParsFinal().find("mu_realmll_met")
+b_realmll_met = bkg_results.floatParsFinal().find("b_realmll_met")
 bkgrealmll_met = ROOT.RooGenericPdf("bkgrealmll_met", "bkgrealmll_met", "1/b_realmll_met * exp(-(@0 - mu_realmll_met)/b_realmll_met - exp(-(@0 - mu_realmll_met)/b_realmll_met))",
                         ROOT.RooArgList(met, mu_realmll_met, b_realmll_met))  
 
 # Background realmll in mll dimension
-bkg_mean_mll = ROOT.RooRealVar("bkg_mean_mll", "bkg_mean_mll", 90, 85, 95)
-bkg_sigmal_mll = ROOT.RooRealVar("bkg_sigmal_mll", "bkg_sigmal_mll", 2, 0.01, 10)
-bkg_sigmar_mll = ROOT.RooRealVar("bkg_sigmar_mll", "bkg_sigmar_mll", 2, 0.01, 10)
-bkg_alphal_mll = ROOT.RooRealVar("bkg_alphal_mll", "bkg_alphal_mll", 4, 0.01, 10)
-bkg_nl_mll = ROOT.RooRealVar("bkg_nl_mll", "bkg_nl_mll", 2, 0.01, 100)
-bkg_alphar_mll = ROOT.RooRealVar("bkg_alphar_mll", "bkg_alphar_mll", 5, 0.01, 10)
-bkg_nr_mll = ROOT.RooRealVar("bkg_nr_mll", "bkg_nr_mll", 0.01, 0.01, 100)
-bkg_mean_mll.setVal(90.9369)
-bkg_sigmal_mll.setVal(0.0100032)
-bkg_sigmar_mll.setVal(0.709995)
-bkg_alphal_mll.setVal(0.709995)
-bkg_alphar_mll.setVal(0.505884)
-bkg_nl_mll.setVal(0.0533984)
-bkg_nr_mll.setVal(0.538716)
-bkgrealmll_mll = ROOT.RooCrystalBall("bkgrealmll_mll", "bkgrealmll_mll", mll, mean_mll, sigmal_mll, sigmar_mll, alphal_mll, nl_mll, alphar_mll, nr_mll)
+bkg_mean_mll = bkg_results.floatParsFinal().find("bkg_mean_mll")
+bkg_sigmal_mll = bkg_results.floatParsFinal().find("bkg_sigmal_mll")
+bkg_sigmar_mll = bkg_results.floatParsFinal().find("bkg_sigmar_mll")
+bkg_alphal_mll = bkg_results.floatParsFinal().find("bkg_alphal_mll")
+bkg_nl_mll = bkg_results.floatParsFinal().find("bkg_nl_mll")
+bkg_alphar_mll = bkg_results.floatParsFinal().find("bkg_alphar_mll")
+bkg_nr_mll = bkg_results.floatParsFinal().find("bkg_nr_mll")
+
+bkgrealmll_mll = ROOT.RooCrystalBall("bkgrealmll_mll", "bkgrealmll_mll", mll, bkg_mean_mll, bkg_sigmal_mll, bkg_sigmar_mll, bkg_alphal_mll, bkg_nl_mll, bkg_alphar_mll, bkg_nr_mll)
 
 #Background 2d realmll model: bkgrealmll_mll_met_2dpdf = bkgrealmll_met * bkgrealmll_mll
 bkgrealmll_mll_met_2dpdf = ROOT.RooProdPdf("bkgrealmll_mll_met_2dpdf", "bkgrealmll_mll_met_2dpdf", [bkgrealmll_mll, bkgrealmll_met])
 
 #Overall 2D bkg model: bkgtot_mll_met_2dpdf = bkgfakemll_mll_met_2dpdf + ratio_realmll * bkgrealmll_mll_met_2dpdf
-ratio_realmll = ROOT.RooRealVar("ratio_realmll", "ratio_realmll", 0.44, 0, 1)
-ratio_realmll.setVal(0.1)
-# TODO: TEMP: IGNORE PRESENCE OF REAL MLL BACKGROUND while we figure out how to do the falling exponential 
+ratio_realmll = bkg_results.floatParsFinal().find("ratio_realmll")
+
 bkgtot_mll_met_2dpdf = ROOT.RooAddPdf("bkgtot_mll_met_2dpdf", "bkgtot_mll_met_2dpdf", [bkgrealmll_mll_met_2dpdf, bkgfakemll_mll_met_2dpdf], [ratio_realmll])
-# bkgtot_mll_met_2dpdf = bkgfakemll_mll_met_2dpdf
+
 
 dPdf["bkg"] = {}
 for varInfo in variablesInfo:
@@ -344,17 +273,19 @@ for varInfo in variablesInfo:
         data_ratio = d[key][f"hist_{variable}"]["obj"].Clone()
         prediction = d[key][f"hist_{variable}"]["obj"].Clone()
         # At each point in the TH1F, we need to evaluate the pdf value 
-        for i in range(1, prediction.GetNbinsX() + 1):
+        for i in range(1, data_ratio.GetNbinsX() + 1):
             thisXval = prediction.GetXaxis().GetBinCenter(i)
             thisArgSet = ROOT.RooArgSet(mll, met, weightXyear)
             thisArgSet.setRealValue(variable, thisXval)
 
             curve = dPdf[key][f"hist_{variable}"]["RooCurve"]
-            fitY = curve.interpolate(thisXval, tolerance=1)
+            fitY = curve.interpolate(thisXval, tolerance=0.1)
             # fitX = curve.GetPointX(thisPoint)
             # fitY = curve.GetPointY(thisPoint)
-            print(f"Setting {variable} to {thisXval}")
-
+            # print(f"Setting {variable} to {thisXval}")
+            if "variable" == "met" and "signal" in key:
+                print("Signal met: special case")
+                fitY = dPdf[key][f"hist_{variable}"]["name"].getVal(thisArgSet)
             print(f"{variable}: From {thisXval}: at point {thisXval}, {fitY}, compare to data point {thisXval}, {prediction.GetBinContent(i)}")
             prediction.SetBinContent(i, fitY)
 
@@ -371,9 +302,12 @@ for varInfo in variablesInfo:
 
         outdir = f"/eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D"
         sampleName = d[key]["name"]
-        canv.SaveAs(f"{sampleName}-{variable}.pdf")
-        canv.SaveAs(f"{sampleName}-{variable}.png")
-        os.system(f"mv {sampleName}-{variable}.* {outdir}")
+        plotname = f"{sampleName}-{variable}"
+        if doLog:
+            plotname = f"{sampleName}-{variable}-log"
+        canv.SaveAs(f"{plotname}.pdf")
+        canv.SaveAs(f"{plotname}.png")
+        os.system(f"mv {plotname}.* {outdir}")
 
         del(canv)
         del(leg)
