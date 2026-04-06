@@ -2,6 +2,87 @@
 
 import ROOT
 from ROOT import RooFit as RF
+import numpy as np
+from array import array
+
+# From https://gitlab.cern.ch/cms-l1-ad/coffea-dask-axol1tl-studies/-/blob/master/prepareDatacards.py?ref_type=heads 
+def prune_knots_in_tiny_tail(knot_x, knot_y, tail_thresh=1e-4, min_keep=10):
+    """
+    Reduce knot density in the very low-yield tail without truncating the domain.
+    Keeps first knot, last knot, and enough interior knots.
+
+    tail_thresh: if remaining cumulative knot_y fraction is below this, stop adding dense knots.
+    """
+    knot_x = np.asarray(knot_x, dtype=np.float64)
+    knot_y = np.asarray(knot_y, dtype=np.float64)
+
+    if knot_x.size != knot_y.size or knot_x.size < 2:
+        return knot_x, knot_y
+
+    # Treat knot_y as "weights" proxy; compute cumulative from left
+    w = np.maximum(knot_y, 0.0)
+    total = float(np.sum(w))
+    if total <= 0:
+        return knot_x, knot_y
+
+    keep = [0]
+    cum = 0.0
+    for i in range(1, len(knot_x) - 1):
+        cum += w[i]
+        remaining = total - cum
+        # keep adding knots until remaining tail is tiny,
+        # then stop keeping every knot (we'll keep last one).
+        keep.append(i)
+        if remaining / total < tail_thresh and len(keep) >= min_keep:
+            break
+
+    keep.append(len(knot_x) - 1)
+    keep = np.unique(keep)
+    return knot_x[keep], knot_y[keep]
+
+
+def make_knot_x(
+        x_min,
+        x_max,
+        n_knots,
+        power = 1.0,
+        min_dx_bins=2,        # enforce some minimum spacing in bin units
+        centers=None,         # pass bin centers for snapping / spacing checks
+    ):
+        n_knots = int(max(2, n_knots))
+        x_min = float(x_min)
+        x_max = float(x_max)
+
+        # Guard against x_min <= 0
+        xmin_eff = max(x_min, 1e-3)
+        #knot_x = np.exp(np.linspace(np.log(xmin_eff), np.log(x_max), n_knots))
+
+        t = np.linspace(0.0, 1.0, n_knots)
+        knot_x = x_min + (x_max - x_min) * (t**power)
+
+        # Optional: snap to nearest bin center to avoid "between-bin" weirdness
+        if centers is not None and len(centers) > 0:
+            knot_x = np.array([centers[np.argmin(np.abs(centers - xx))] for xx in knot_x], dtype=float)
+
+        # Optional: enforce minimum spacing (in bins) to avoid duplicates after snapping
+        if centers is not None and min_dx_bins is not None and min_dx_bins > 0:
+            # approximate bin width from centers
+            if len(centers) > 1:
+                bw = float(np.median(np.diff(centers)))
+            else:
+                bw = 1.0
+            min_dx = min_dx_bins * bw
+
+            filtered = [knot_x[0]]
+            for xx in knot_x[1:]:
+                if xx - filtered[-1] >= min_dx:
+                    filtered.append(xx)
+            if filtered[-1] != knot_x[-1]:
+                filtered.append(knot_x[-1])
+            knot_x = np.array(filtered, dtype=float)
+
+        return knot_x
+
 
 ##### DEFINE FIT OBSERVABLES ####
 mll = ROOT.RooRealVar("m_ll", "m_ll", 60, 120) 
@@ -34,21 +115,70 @@ sig_roo_template_hist = ROOT.RooDataHist("sig_roo_template_hist", "sig_roo_templ
 # Create a RooHistPdf based on the RooFit histogram
 sig_roohistpdf_met = ROOT.RooHistPdf("sig_roohistpdf_met", "sig_roohistpdf_met", met, sig_roo_template_hist, intOrder=0)
 
-# sig_gumbel_met = ROOT.RooGenericPdf('sig_gumbel_met', '(1/beta_met) *  exp( ((met - alpha_met)/beta_met) - exp((met - alpha_met)/beta_met) ) ', ROOT.RooArgList(met, alpha_met, beta_met))
 
+hIn = sig_met_hist 
+nBins = hIn.GetNbinsX()
+centers = np.array([hIn.GetBinCenter(i) for i in range(1, nBins+1)], dtype=np.float64)
+vals    = np.array([max(float(hIn.GetBinContent(i)), 0.0) for i in range(1, nBins+1)], dtype=np.float64)
+
+knot_avg_halfwidth_bins = 4
+min_y = 1e-9
+l=1.0
+tail_thresh=1e-4
+knot_x = make_knot_x(
+    x_min=centers[0],
+    x_max=centers[-1],
+    n_knots=60,
+    power = 10.0, #higher number = more dense at low mass
+    centers=centers,
+)
+#find y value for each knot (average over local bins)
+knot_y = []
+for xx in knot_x:
+    ib = int(np.argmin(np.abs(centers - xx)))
+    i0 = max(0, ib - int(knot_avg_halfwidth_bins))
+    i1 = min(nBins - 1, ib + int(knot_avg_halfwidth_bins))
+    local = vals[i0:i1+1]
+    yk = float(np.mean(local)) if local.size else float(vals[ib])
+    knot_y.append(max(yk, min_y))
+
+
+knot_x = np.array(knot_x, dtype=np.double)
+knot_y = np.array(knot_y, dtype=np.double)
+vx = ROOT.std.vector('double')(knot_x)
+vy = ROOT.std.vector('double')(knot_y)
+
+# knot_x, knot_y = prune_knots_in_tiny_tail(knot_x, knot_y, tail_thresh=tail_thresh, min_keep=2)
+knot_y_use = np.maximum(knot_y, min_y).astype(np.double)
+vy_use = ROOT.std.vector('double')(knot_y_use)
+
+print(vy_use)
+spline = ROOT.RooSpline(
+        "spline", "spline",
+        met,
+        vx,
+        vy_use,
+        order=3
+    )
+
+pdf_of_spline = ROOT.RooGenericPdf(
+    "pdf_of_spline", "pdf_of_spline",
+    "@0",                      # use spline directly
+    ROOT.RooArgList(spline)
+)
 
 # Load the TH1 into here
 
 
 # TODO: testing DCB for signal met
-# mean_met = ROOT.RooRealVar("mean_met", "mean_met", 400, 300, 500)
-# sigmal_met = ROOT.RooRealVar("sigmal_met", "sigmal_met", 80, 30, 200)
-# sigmar_met = ROOT.RooRealVar("sigmar_met", "sigmar_met", 2, 0.5, 10)
-# alphal_met = ROOT.RooRealVar("alphal_met","alphal_met", 4, 0.01, 10)
-# nl_met = ROOT.RooRealVar("nl_met", "nl_met", 3, 1, 10)
-# alphar_met = ROOT.RooRealVar("alphar_met","alphar_met", 5, 0.01, 10)
-# nr_met = ROOT.RooRealVar("nr_met", "nr_met", 3, 1, 10)
-# sig_dcb_met = ROOT.RooCrystalBall("sig_dcb_met", "sig_dcb_met", met, mean_met, sigmal_met, sigmar_met, alphal_met, nl_met, alphar_met, nr_met)
+mean_met = ROOT.RooRealVar("mean_met", "mean_met", 400, 300, 500)
+sigmal_met = ROOT.RooRealVar("sigmal_met", "sigmal_met", 80, 30, 200)
+sigmar_met = ROOT.RooRealVar("sigmar_met", "sigmar_met", 2, 0.5, 10)
+alphal_met = ROOT.RooRealVar("alphal_met","alphal_met", 4, 0.01, 10)
+nl_met = ROOT.RooRealVar("nl_met", "nl_met", 3, 1, 10)
+alphar_met = ROOT.RooRealVar("alphar_met","alphar_met", 5, 0.01, 10)
+nr_met = ROOT.RooRealVar("nr_met", "nr_met", 3, 1, 10)
+sig_dcb_met = ROOT.RooCrystalBall("sig_dcb_met", "sig_dcb_met", met, mean_met, sigmal_met, sigmar_met, alphal_met, nl_met, alphar_met, nr_met)
 
 # https://root.cern.ch/doc/v638/classRooGamma.html
 gamma_met = ROOT.RooRealVar("gamma_met", "gamma_met", 200, 10, 500) # gamma in ROOT = alpha on wikipedia
@@ -58,16 +188,16 @@ sig_gamma_met = ROOT.RooGamma("sig_gamma_met", "sig_gamma_met", met, gamma_met, 
 
 #Signal 1d mll model
 mean_mll = ROOT.RooRealVar("mean_mll", "mean_mll", 90, 85, 95)
-sigmal_mll = ROOT.RooRealVar("sigmal_mll", "sigmal_mll", 2, 0.01, 10)
-sigmar_mll = ROOT.RooRealVar("sigmar_mll", "sigmar_mll", 2, 0.01, 10)
-alphal_mll = ROOT.RooRealVar("alphal_mll","alphal_mll", 4, 0.01, 10)
-nl_mll = ROOT.RooRealVar("nl_mll", "nl_mll", 2, 0.01, 100)
-alphar_mll = ROOT.RooRealVar("alphar_mll","alphar_mll", 5, 0.01, 10)
-nr_mll = ROOT.RooRealVar("nr_mll", "nr_mll", 0.01, 0.01, 100)
+sigmal_mll = ROOT.RooRealVar("sigmal_mll", "sigmal_mll", 3, 1, 50)
+sigmar_mll = ROOT.RooRealVar("sigmar_mll", "sigmar_mll", 2, 0.5, 50)
+alphal_mll = ROOT.RooRealVar("alphal_mll","alphal_mll", 2.7, 0.1, 50)
+nl_mll = ROOT.RooRealVar("nl_mll", "nl_mll", 0.1, 0.001, 10)
+alphar_mll = ROOT.RooRealVar("alphar_mll","alphar_mll", 0.8, 0.01, 50)
+nr_mll = ROOT.RooRealVar("nr_mll", "nr_mll", 3, 0.01, 100)
 sig_dcb_mll = ROOT.RooCrystalBall("sig_dcb_mll", "sig_dcb_mll", mll, mean_mll, sigmal_mll, sigmar_mll, alphal_mll, nl_mll, alphar_mll, nr_mll)
 
-#Signal 2D model: sigtot_mll_met_2dpdf = sig_smoid_met * sig_dcb_mll TODO: testing sig_dcb_met instead of sig_dcb_mll
-sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_histpdf_met", "sigtot_dcb_mll_histpdf_met", [sig_dcb_mll, sig_roohistpdf_met])
+#Signal 2D model: sigtot_mll_met_2dpdf = sig_smoid_met * sig_dcb_mll TODO: put the spline back in
+sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_histpdf_met", "sigtot_dcb_mll_histpdf_met", [sig_dcb_mll, pdf_of_spline]) # pdf_of_spline])
 
 ###### 2D signal fit 
 signal_result = sigtot_mll_met_2dpdf.fitTo(sigdataset, RF.Save(), SumW2Error=True) #where dataset is RooDataSet
@@ -126,6 +256,7 @@ print(params)
 
 w = ROOT.RooWorkspace("workspace", "workspace")
 w.Import(sig_roohistpdf_met)
+w.Import(pdf_of_spline)
 
 f = ROOT.TFile("fitresult.root", "RECREATE")
 signal_result.Write("signal_result")

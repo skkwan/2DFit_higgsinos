@@ -44,7 +44,7 @@ weightXyear = ROOT.RooRealVar("weight_nominal_mm", "weight_nominal_mm", -1, 1)
 
 variablesInfo = [
     ["mll", "m(ll) / GeV", 60, 60., 120., mll],
-    ["met", "MET / GeV", 60, 0., 1200., met], 
+    ["met", "MET / GeV", 120, 0., 1200., met], 
     # ["weightXyear", "WeightXyear", 40, 0., 10.],
 ]
 
@@ -102,11 +102,13 @@ nl_mll = signal_results.floatParsFinal().find("nl_mll")
 nr_mll = signal_results.floatParsFinal().find("nr_mll")
 mypdf = workspace.pdf("sig_roohistpdf_met")
 print("mypdf:", mypdf)
+myspline = workspace.function("pdf_of_spline")
 
+# Temporary placeholder
 sig_dcb_mll = ROOT.RooCrystalBall("sig_dcb_mll", "sig_dcb_mll", mll, mean_mll, sigmal_mll, sigmar_mll, alphal_mll, nl_mll, alphar_mll, nr_mll)
 
 #Signal 2D model: sigtot_mll_met_2dpdf = sig_smoid_met * sig_dcb_mll
-sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_dcb_met", "sigtot_dcb_mll_dcb_met", [sig_dcb_mll, mypdf])
+sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_dcb_met", "sigtot_dcb_mll_dcb_met", [sig_dcb_mll, myspline])
 
 # Fill dPdf by hand 
 dPdf["signal"] = {}
@@ -284,8 +286,12 @@ for varInfo in variablesInfo:
             # fitY = curve.GetPointY(thisPoint)
             # print(f"Setting {variable} to {thisXval}")
             if "variable" == "met" and "signal" in key:
-                print("Signal met: special case")
-                fitY = dPdf[key][f"hist_{variable}"]["name"].getVal(thisArgSet)
+                # # RooHistPDF block 
+                # print("Signal met: special case")
+                # fitY = dPdf[key][f"hist_{variable}"]["name"].getVal(thisArgSet)
+                # # Spline block
+                fitY = spline.getVal(thisArgSet)
+
             print(f"{variable}: From {thisXval}: at point {thisXval}, {fitY}, compare to data point {thisXval}, {prediction.GetBinContent(i)}")
             prediction.SetBinContent(i, fitY)
 
