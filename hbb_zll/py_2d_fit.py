@@ -223,17 +223,13 @@ mu_realmll_met = ROOT.RooRealVar('mu_realmll_met', 'mu_realmll_met', 50, 30, 400
 b_realmll_met = ROOT.RooRealVar('b_realmll_met', 'b_realmll_met', 40, 20, 100)    # adequate value somewhere around 41 based on hand-drawn plots
 bkgrealmll_met = ROOT.RooGenericPdf("bkgrealmll_met", "bkgrealmll_met", "1/b_realmll_met * exp(-(@0 - mu_realmll_met)/b_realmll_met - exp(-(@0 - mu_realmll_met)/b_realmll_met))",
                         ROOT.RooArgList(met, mu_realmll_met, b_realmll_met))  
-# Background real mll model in mll dimension: use the same shape as the signal
+# Background real mll model in mll dimension: use a simple Gaussian
 bkg_mean_mll = ROOT.RooRealVar("bkg_mean_mll", "bkg_mean_mll", 90, 85, 95)
-bkg_sigmal_mll = ROOT.RooRealVar("bkg_sigmal_mll", "bkg_sigmal_mll", 2, 0.01, 10)
-bkg_sigmar_mll = ROOT.RooRealVar("bkg_sigmar_mll", "bkg_sigmar_mll", 2, 0.01, 10)
-bkg_alphal_mll = ROOT.RooRealVar("bkg_alphal_mll", "bkg_alphal_mll", 4, 0.01, 10)
-bkg_nl_mll = ROOT.RooRealVar("bkg_nl_mll", "bkg_nl_mll", 2, 0.01, 100)
-bkg_alphar_mll = ROOT.RooRealVar("bkg_alphar_mll", "bkg_alphar_mll", 5, 0.01, 10)
-bkg_nr_mll = ROOT.RooRealVar("bkg_nr_mll", "bkg_nr_mll", 0.01, 0.01, 100)
-bkgrealmll_dcb_mll = ROOT.RooCrystalBall("bkg_dcb_mll", "bkg_dcb_mll", mll, bkg_mean_mll, bkg_sigmal_mll, bkg_sigmar_mll, bkg_alphal_mll, bkg_nl_mll, bkg_alphar_mll, bkg_nr_mll)
+bkg_sigma_mll = ROOT.RooRealVar("bkg_sigma_mll", "bkg_sigma_mll", 2, 0.01, 10)
+bkgrealmll_sigma_mll = ROOT.RooGaussian("bkg_gaus_mll", "bkg_gaus_mll", mll, bkg_mean_mll, bkg_sigma_mll)
+
 #Background 2d realmll model: bkgrealmll_mll_met_2dpdf = bkgrealmll_met * bkgrealmll_dcb_mll
-bkgrealmll_mll_met_2dpdf = ROOT.RooProdPdf("bkgrealmll_mll_met_2dpdf", "bkgrealmll_mll_met_2dpdf", [bkgrealmll_dcb_mll, bkgrealmll_met])
+bkgrealmll_mll_met_2dpdf = ROOT.RooProdPdf("bkgrealmll_mll_met_2dpdf", "bkgrealmll_mll_met_2dpdf", [bkgrealmll_sigma_mll, bkgrealmll_met])
 
 
 #Overall 2D bkg model: bkgtot_mll_met_2dpdf = bkgfakemet_mll_met_2dpdf + ratio_realmll * bkgrealmll_mll_met_2dpdf

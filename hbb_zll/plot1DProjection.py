@@ -149,14 +149,8 @@ bkgrealmll_met = ROOT.RooGenericPdf("bkgrealmll_met", "bkgrealmll_met", "1/b_rea
 
 # Background realmll in mll dimension
 bkg_mean_mll = bkg_results.floatParsFinal().find("bkg_mean_mll")
-bkg_sigmal_mll = bkg_results.floatParsFinal().find("bkg_sigmal_mll")
-bkg_sigmar_mll = bkg_results.floatParsFinal().find("bkg_sigmar_mll")
-bkg_alphal_mll = bkg_results.floatParsFinal().find("bkg_alphal_mll")
-bkg_nl_mll = bkg_results.floatParsFinal().find("bkg_nl_mll")
-bkg_alphar_mll = bkg_results.floatParsFinal().find("bkg_alphar_mll")
-bkg_nr_mll = bkg_results.floatParsFinal().find("bkg_nr_mll")
-
-bkgrealmll_mll = ROOT.RooCrystalBall("bkgrealmll_mll", "bkgrealmll_mll", mll, bkg_mean_mll, bkg_sigmal_mll, bkg_sigmar_mll, bkg_alphal_mll, bkg_nl_mll, bkg_alphar_mll, bkg_nr_mll)
+bkg_sigma_mll = bkg_results.floatParsFinal().find("bkg_sigma_mll")
+bkgrealmll_mll = ROOT.RooGaussian("bkg_gaus_mll", "bkg_gaus_mll", mll, bkg_mean_mll, bkg_sigma_mll)
 
 #Background 2d realmll model: bkgrealmll_mll_met_2dpdf = bkgrealmll_met * bkgrealmll_mll
 bkgrealmll_mll_met_2dpdf = ROOT.RooProdPdf("bkgrealmll_mll_met_2dpdf", "bkgrealmll_mll_met_2dpdf", [bkgrealmll_mll, bkgrealmll_met])
