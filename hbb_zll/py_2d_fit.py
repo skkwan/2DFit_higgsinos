@@ -122,7 +122,7 @@ centers = np.array([hIn.GetBinCenter(i) for i in range(1, nBins+1)], dtype=np.fl
 vals    = np.array([max(float(hIn.GetBinContent(i)), 0.0) for i in range(1, nBins+1)], dtype=np.float64)
 
 knot_avg_halfwidth_bins = 4
-min_y = 1e-9
+min_y = 1e-4
 l=1.0
 tail_thresh=1e-4
 knot_x = make_knot_x(
@@ -152,7 +152,6 @@ vy = ROOT.std.vector('double')(knot_y)
 knot_y_use = np.maximum(knot_y, min_y).astype(np.double)
 vy_use = ROOT.std.vector('double')(knot_y_use)
 
-print(vy_use)
 spline = ROOT.RooSpline(
         "spline", "spline",
         met,
@@ -163,7 +162,7 @@ spline = ROOT.RooSpline(
 
 pdf_of_spline = ROOT.RooGenericPdf(
     "pdf_of_spline", "pdf_of_spline",
-    "@0",                      # use spline directly
+    "max(@0, 1e-9)",    # prevent the interpolation from going 0 or negative 
     ROOT.RooArgList(spline)
 )
 
@@ -196,8 +195,8 @@ alphar_mll = ROOT.RooRealVar("alphar_mll","alphar_mll", 0.16, 0.01, 50)
 nr_mll = ROOT.RooRealVar("nr_mll", "nr_mll", 73, 1, 200)
 sig_dcb_mll = ROOT.RooCrystalBall("sig_dcb_mll", "sig_dcb_mll", mll, mean_mll, sigmal_mll, sigmar_mll, alphal_mll, nl_mll, alphar_mll, nr_mll)
 
-#Signal 2D model: sigtot_mll_met_2dpdf = sig_smoid_met * sig_dcb_mll TODO: put the spline back in
-sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_histpdf_met", "sigtot_dcb_mll_histpdf_met", [sig_dcb_mll, sig_gamma_met]) # pdf_of_spline])
+#Signal 2D model: sigtot_mll_met_2dpdf = sig_smoid_met * spline
+sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_spline_met", "sigtot_dcb_mll_spline_met", [sig_dcb_mll, pdf_of_spline])
 
 ###### 2D signal fit 
 signal_result = sigtot_mll_met_2dpdf.fitTo(sigdataset, RF.Save(), SumW2Error=True) #where dataset is RooDataSet
