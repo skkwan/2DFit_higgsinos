@@ -1,7 +1,8 @@
 import os, ROOT
 import cmsstyle as CMS
+import numpy as np
 
-doLog = False
+doLog = True
 
 def addOverflow(h: ROOT.TH1F) -> ROOT.TH1F:
     """
@@ -23,15 +24,15 @@ def getTChainRDF(listOfFiles: list[str], treeName: str) -> tuple[ROOT.TChain, RO
     ch = ROOT.TChain(treeName)
     for file in listOfFiles:
         ch.Add(file)
-    df = ROOT.RDataFrame(ch, {"m_ll", "met", "weight_mm_nominal"})
+    df = ROOT.RDataFrame(ch, {"m_ll", "met", "weight_nominal"})
     return ch, df
 
 block1 = [
-	"snapshot_TChiZH_650_1_cat_0_batch_0_channel_mm_SR_mll_MET_fit_scheme.root"
+	"snapshot_TChiZH_650_1_SR_mll_MET_fit_scheme.root",
 ]
 
 block2 = [
-    "backgrounds.root"
+    "backgrounds_for_2D_fit.root",
 ]
 
 ch1, df1 = getTChainRDF(block1, "event_tree")
@@ -44,27 +45,28 @@ weightXyear = ROOT.RooRealVar("weight_nominal_mm", "weight_nominal_mm", -1, 1)
 
 variablesInfo = [
     ["mll", "m(ll) / GeV", 60, 60., 120., mll],
-    ["met", "MET / GeV", 120, 0., 1200., met], 
+    ["met", "MET / GeV", 40, 0., 1200., met], 
     # ["weightXyear", "WeightXyear", 40, 0., 10.],
 ]
 
-resultsfile = ROOT.TFile.Open("fitresult.root", "READ")
+resultsfile = ROOT.TFile.Open("fitresult_modified.root", "READ")
 workspace = resultsfile.Get("workspace")
-signal_results = resultsfile.Get("signal_result")
+sig_results = resultsfile.Get("sig_result")
 bkg_results = resultsfile.Get("bkg_result")
+zpeak_results = resultsfile.Get("zpeak_result")
 
-##### Retrieve signal datasset from signal root file 
-sigfilepath = 'snapshot_TChiZH_650_1_cat_0_batch_0_channel_mm_SR_mll_MET_fit_scheme.root'
+##### Retrieve signal dataset from signal root file 
+sigfilepath = "snapshot_TChiZH_650_1_SR_mll_MET_fit_scheme.root"
 sigfile = ROOT.TFile.Open(sigfilepath, "READ")
 sigtree = sigfile.Get("event_tree")
-variables = ROOT.RooArgSet(mll, met, weightXyear)
+variables = ROOT.RooArgSet(mll, met)
 sigdataset = ROOT.RooDataSet("sigdataset", "sigdataset", variables, ROOT.RooFit.Import(sigtree), ROOT.RooFit.WeightVar(weightXyear))
 
 ###### Retrive cr data root file ########
-crfilepath = 'backgrounds.root'
+crfilepath = "backgrounds_for_2D_fit.root"
 crfile = ROOT.TFile.Open(crfilepath, "READ")
 crtree = crfile.Get("event_tree")
-variables = ROOT.RooArgSet(mll, met, weightXyear)
+variables = ROOT.RooArgSet(mll, met)
 bkgdataset = ROOT.RooDataSet("bkgdataset", "bkgdataset", variables, ROOT.RooFit.Import(crtree), ROOT.RooFit.WeightVar(weightXyear))
 
 
@@ -93,13 +95,13 @@ d["bkg"]["dataset"] = bkgdataset
 d["bkg"]["name"] = "background"
 
 
-mean_mll = signal_results.floatParsFinal().find("mean_mll")
-sigmal_mll = signal_results.floatParsFinal().find("sigmal_mll")
-sigmar_mll = signal_results.floatParsFinal().find("sigmar_mll")
-alphal_mll = signal_results.floatParsFinal().find("alphal_mll")
-alphar_mll = signal_results.floatParsFinal().find("alphar_mll")
-nl_mll = signal_results.floatParsFinal().find("nl_mll")
-nr_mll = signal_results.floatParsFinal().find("nr_mll")
+mean_mll = sig_results.floatParsFinal().find("mean_mll")
+sigmal_mll = sig_results.floatParsFinal().find("sigmal_mll")
+sigmar_mll = sig_results.floatParsFinal().find("sigmar_mll")
+alphal_mll = sig_results.floatParsFinal().find("alphal_mll")
+alphar_mll = sig_results.floatParsFinal().find("alphar_mll")
+nl_mll = sig_results.floatParsFinal().find("nl_mll")
+nr_mll = sig_results.floatParsFinal().find("nr_mll")
 mypdf = workspace.pdf("sig_roohistpdf_met")
 print("mypdf:", mypdf)
 myspline = workspace.function("pdf_of_spline")
@@ -147,10 +149,15 @@ b_realmll_met = bkg_results.floatParsFinal().find("b_realmll_met")
 bkgrealmll_met = ROOT.RooGenericPdf("bkgrealmll_met", "bkgrealmll_met", "1/b_realmll_met * exp(-(@0 - mu_realmll_met)/b_realmll_met - exp(-(@0 - mu_realmll_met)/b_realmll_met))",
                         ROOT.RooArgList(met, mu_realmll_met, b_realmll_met))  
 
-# Background realmll in mll dimension
-bkg_mean_mll = bkg_results.floatParsFinal().find("bkg_mean_mll")
-bkg_sigma_mll = bkg_results.floatParsFinal().find("bkg_sigma_mll")
-bkgrealmll_mll = ROOT.RooGaussian("bkg_gaus_mll", "bkg_gaus_mll", mll, bkg_mean_mll, bkg_sigma_mll)
+# Background realmll in mll dimension (parameters from Z-peak fit)
+zpeak_mean_mll = zpeak_results.floatParsFinal().find("peak_mean_mll")
+zpeak_sigmal_mll = zpeak_results.floatParsFinal().find("peak_sigmal_mll")
+zpeak_sigmar_mll = zpeak_results.floatParsFinal().find("peak_sigmar_mll")   
+zpeak_alphal_mll = zpeak_results.floatParsFinal().find("peak_alphal_mll")
+zpeak_nl_mll = zpeak_results.floatParsFinal().find("peak_nl_mll")
+zpeak_alphar_mll = zpeak_results.floatParsFinal().find("peak_alphar_mll")
+zpeak_nr_mll = zpeak_results.floatParsFinal().find("peak_nr_mll")
+bkgrealmll_mll = ROOT.RooCrystalBall("bkgrealmll_mll", "bkgrealmll_mll", mll, zpeak_mean_mll, zpeak_sigmal_mll, zpeak_sigmar_mll, zpeak_alphal_mll, zpeak_nl_mll, zpeak_alphar_mll, zpeak_nr_mll)
 
 #Background 2d realmll model: bkgrealmll_mll_met_2dpdf = bkgrealmll_met * bkgrealmll_mll
 bkgrealmll_mll_met_2dpdf = ROOT.RooProdPdf("bkgrealmll_mll_met_2dpdf", "bkgrealmll_mll_met_2dpdf", [bkgrealmll_mll, bkgrealmll_met])
@@ -203,7 +210,7 @@ for varInfo in variablesInfo:
     # Plot both signal and background points
     for key in d:
         # Each variable only needs one frame
-        frame = rooVar.frame(40)
+        frame = rooVar.frame(nBins)
 
 
         print("Doing", key)
@@ -245,7 +252,8 @@ for varInfo in variablesInfo:
                                     ROOT.RooFit.LineColor(d[key]["color"]),
                                     ROOT.RooFit.LineWidth(d[key]["linewidth"]),
                                     ROOT.RooFit.MarkerColor(d[key]["color"]),
-                                    ROOT.RooFit.MarkerSize(1))
+                                    ROOT.RooFit.MarkerSize(1),
+                                    ROOT.RooFit.Binning(nBins))
         # Hodgepodge of arguments
         d[key][f"hist_{variable}"] = {}
         d[key][f"hist_{variable}"]["var"] = dPdf[key][f"hist_{variable}"]["var"] # copy from dPdf
@@ -259,23 +267,56 @@ for varInfo in variablesInfo:
                                                     ROOT.RooFit.LineColor(dPdf[key][f"hist_{variable}"]["color"]),
                                                     ROOT.RooFit.LineWidth(2),
                                                     ROOT.RooFit.LineStyle(dPdf[key][f"hist_{variable}"]["linestyle"]),
-                                                    ROOT.RooFit.MarkerSize(0))
-        dPdf[key][f"hist_{variable}"]["RooCurve"] = frame.getCurve(dPdf[key][f"hist_{variable}"]["name"])
+                                                    ROOT.RooFit.MarkerSize(0),
+                                                    ROOT.RooFit.Binning(nBins))
+        frame.Print("v")
+        dPdf[key][f"hist_{variable}"]["HistFromFrame"] = frame.getCurve(dPdf[key][f"hist_{variable}"]["name"])
+        print(dPdf[key][f"hist_{variable}"]["HistFromFrame"])
         leg.AddEntry(frame.findObject(dPdf[key][f"hist_{variable}"]["name"]), dPdf[key][f"hist_{variable}"]["label"])
         frame.Draw("SAME")
+
+
+        # Create a 1D function f(x) = Integral(f(x,y) dy)
+        # Default: met
+        if (variable == "met"):
+            projected_pdf = dPdf[key][f"hist_{variable}"]["pdf"].createProjection(ROOT.RooArgSet("mll"))
+        # Alternative: mll
+        if (variable == "mll"):
+            projected_pdf = dPdf[key][f"hist_{variable}"]["pdf"].createProjection(ROOT.RooArgSet("met"))
 
         # Ratio plot
         canv.cd(2)
         data_ratio = d[key][f"hist_{variable}"]["obj"].Clone()
         prediction = d[key][f"hist_{variable}"]["obj"].Clone()
+
+        # First print 
+        for i in range(1, data_ratio.GetNbinsX() + 1):
+            print(d[key][f"hist_{variable}"]["obj"].GetNbinsX(), d[key][f"hist_{variable}"]["obj"].GetBinCenter(i), d[key][f"hist_{variable}"]["obj"].GetBinContent(i))
+
         # At each point in the TH1F, we need to evaluate the pdf value 
         for i in range(1, data_ratio.GetNbinsX() + 1):
-            thisXval = prediction.GetXaxis().GetBinCenter(i)
-            thisArgSet = ROOT.RooArgSet(mll, met, weightXyear)
-            thisArgSet.setRealValue(variable, thisXval)
+            thisXval = data_ratio.GetXaxis().GetBinCenter(i)
+  
+            print("thisXVal is ", thisXval)
 
-            curve = dPdf[key][f"hist_{variable}"]["RooCurve"]
-            fitY = curve.interpolate(thisXval, tolerance=0.1)
+            # if variable == "met":
+            #     met.setVal(thisXval)
+            #     norm_set = ROOT.RooArgSet(met)
+            # elif variable == "mll":
+            #     mll.setVal(thisXval)
+            #     norm_set = ROOT.RooArgSet(mll)
+
+            # fitY = projected_pdf.getVal(norm_set)
+            print(type(dPdf[key][f"hist_{variable}"]["HistFromFrame"]))
+            yArr = dPdf[key][f"hist_{variable}"]["HistFromFrame"].GetY()        
+            index = dPdf[key][f"hist_{variable}"]["HistFromFrame"].findPoint(thisXval)
+            pdfX = dPdf[key][f"hist_{variable}"]["HistFromFrame"].GetPointX(index)
+            pdfY = dPdf[key][f"hist_{variable}"]["HistFromFrame"].GetPointY(index)
+            print("Found index", index, "for xval", thisXval)
+
+            if (pdfX == -1):
+                continue
+
             # fitX = curve.GetPointX(thisPoint)
             # fitY = curve.GetPointY(thisPoint)
             # print(f"Setting {variable} to {thisXval}")
@@ -286,8 +327,8 @@ for varInfo in variablesInfo:
                 # # Spline block
                 fitY = spline.getVal(thisArgSet)
 
-            print(f"{variable}: From {thisXval}: at point {thisXval}, {fitY}, compare to data point {thisXval}, {prediction.GetBinContent(i)}")
-            prediction.SetBinContent(i, fitY)
+            print(f"{variable}: At point {thisXval}, got point x = {pdfX}, y = {pdfY}, compare to data point x = {thisXval}, y = {data_ratio.GetBinContent(i)}")
+            prediction.SetBinContent(i, pdfY)
 
         data_ratio.Divide(prediction)
         CMS.cmsObjectDraw(data_ratio, "E", MarkerStyle=ROOT.kFullCircle)
@@ -300,7 +341,7 @@ for varInfo in variablesInfo:
 
         CMS.UpdatePad(canv)
 
-        outdir = f"/eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D"
+        outdir = f"/eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/test"
         sampleName = d[key]["name"]
         plotname = f"{sampleName}-{variable}"
         if doLog:

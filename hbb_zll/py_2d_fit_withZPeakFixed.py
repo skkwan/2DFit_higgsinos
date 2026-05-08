@@ -5,7 +5,10 @@ from ROOT import RooFit as RF
 import numpy as np
 from array import array
 
-# From https://gitlab.cern.ch/cms-l1-ad/coffea-dask-axol1tl-studies/-/blob/master/prepareDatacards.py?ref_type=heads 
+##################################################
+# Helper functions for spline (used for the signal MET)
+##################################################
+# From https://gitlab.cern.ch/cms-l1-ad/coffea-dask-axol1tl-studies/-/blob/master/prepareDatacards.py?ref_type=heads
 def prune_knots_in_tiny_tail(knot_x, knot_y, tail_thresh=1e-4, min_keep=10):
     """
     Reduce knot density in the very low-yield tail without truncating the domain.
@@ -83,36 +86,35 @@ def make_knot_x(
 
         return knot_x
 
-
-### Get Z-peak initial fit results
-zpeak_file = ROOT.TFile.Open("initial_zPeak_fit_result.root", "READ")
-zpeak_results = zpeak_file.Get("zPeak_CRZ_fit_result")
-zpeak_mean = zpeak_results.floatParsFinal().find("bkg_Zpeak_mean_mll")
-zpeak_sigma = zpeak_results.floatParsFinal().find("bkg_Zpeak_sigma_mll")
-
-##### DEFINE FIT OBSERVABLES ####
-mll = ROOT.RooRealVar("m_ll", "m_ll", 60, 120) 
+##################################################
+##### Define fit observables 
+##################################################
+mll = ROOT.RooRealVar("m_ll", "m_ll", 60, 120)
 met = ROOT.RooRealVar("met", "met", 0, 1200)
 
-
-###### Retrieve signal dataset from signal root file 
-sigfilepath = 'snapshot_TChiZH_650_1_cat_0_batch_0_channel_mm_SR_mll_MET_fit_scheme.root'
+##################################################
+###### Retrieve signal dataset (prepared with reformat.py)
+##################################################
+sigfilepath = 'snapshot_TChiZH_650_1_SR_mll_MET_fit_scheme.root'
 sigfile = ROOT.TFile.Open(sigfilepath, "READ")
 sigtree = sigfile.Get("event_tree")
-weightXyear = ROOT.RooRealVar("weight_nominal_mm", "weight_nominal_mm", -1, 1)
+weightXyear = ROOT.RooRealVar("weight_nominal", "weight_nominal", -1, 1)
 variables = ROOT.RooArgSet(mll, met, weightXyear)
 sigdataset = ROOT.RooDataSet("sigdataset", "sigdataset", variables, ROOT.RooFit.Import(sigtree), ROOT.RooFit.WeightVar(weightXyear))
 
+##################################################
+###### Retrieve background dataset (prepared with reformat.py)
+##################################################
+bkgfilepath = 'backgrounds_for_2D_fit.root'
+bkgfile = ROOT.TFile.Open(bkgfilepath, "READ")
+bkgtree = bkgfile.Get("event_tree")
+weightXyear = ROOT.RooRealVar("weight_nominal", "weight_nominal", -1, 1)
+variables = ROOT.RooArgSet(mll, met, weightXyear)
+bkgdataset = ROOT.RooDataSet("bkgdataset", "bkgdataset", variables, ROOT.RooFit.Import(bkgtree), ROOT.RooFit.WeightVar(weightXyear))
 
-# # ##### SIGNAL FIT to signal MC file ######
-
-#Signal 1d met model. Formerly sigmoid in Meraj's notebook, we try a DCB and also a Gamma
-a_met = ROOT.RooRealVar('a_met', 'a_met', 10, 0, 3000)
-b_met = ROOT.RooRealVar('b_met', 'b_met', 10, 0, 1000)  
-c_met = ROOT.RooRealVar('c_met', 'c_met', 0.5, 0, 1000)  
-e_met = ROOT.RooRealVar('e_met', 'e_met', 1, 0.2, 100) 
-sig_smoid_met = ROOT.RooGenericPdf('sig_smoid_met', '(1-exp(-c_met*met))/(1 + exp((met^e_met-a_met)/b_met))', ROOT.RooArgList(met, a_met, b_met, c_met, e_met))
-
+###########################################################################
+# Declare the signal 1D PDFs and multiply them into 2D PDFs
+###########################################################################
 # Get TH1 of signal met: https://github.com/guitargeek/hasco-2023-root/blob/main/notebooks/roofit-tutorial-01.ipynb 
 sig_met_hist = ROOT.TH1D("sig_met_hist", "sig_met_hist", 120, 0, 1200)
 sigtree.Draw("met >> sig_met_hist")
@@ -121,11 +123,10 @@ sig_roo_template_hist = ROOT.RooDataHist("sig_roo_template_hist", "sig_roo_templ
 # Create a RooHistPdf based on the RooFit histogram
 sig_roohistpdf_met = ROOT.RooHistPdf("sig_roohistpdf_met", "sig_roohistpdf_met", met, sig_roo_template_hist, intOrder=0)
 
-
-hIn = sig_met_hist 
-nBins = hIn.GetNbinsX()
-centers = np.array([hIn.GetBinCenter(i) for i in range(1, nBins+1)], dtype=np.float64)
-vals    = np.array([max(float(hIn.GetBinContent(i)), 0.0) for i in range(1, nBins+1)], dtype=np.float64)
+# Build spline-based signal met PDF from signal met histogram
+nBins = sig_met_hist.GetNbinsX()
+centers = np.array([sig_met_hist.GetBinCenter(i) for i in range(1, nBins+1)], dtype=np.float64)
+vals    = np.array([max(float(sig_met_hist.GetBinContent(i)), 0.0) for i in range(1, nBins+1)], dtype=np.float64)
 
 knot_avg_halfwidth_bins = 4
 min_y = 1e-4
@@ -168,30 +169,16 @@ spline = ROOT.RooSpline(
 
 pdf_of_spline = ROOT.RooGenericPdf(
     "pdf_of_spline", "pdf_of_spline",
-    "max(@0, 1e-9)",    # prevent the interpolation from going 0 or negative 
+    "max(@0, 1e-9)",    # prevent the interpolation from going 0 or negative
     ROOT.RooArgList(spline)
 )
 
-# Load the TH1 into here
+# # Also keep a RooHistPdf for reference
+# sig_roo_template_hist = ROOT.RooDataHist("sig_roo_template_hist", "sig_roo_template_hist", ROOT.RooArgSet(met), sig_met_hist)
+# sig_roohistpdf_met = ROOT.RooHistPdf("sig_roohistpdf_met", "sig_roohistpdf_met", ROOT.RooArgSet(met), sig_roo_template_hist, intOrder=0)
 
 
-# TODO: testing DCB for signal met
-mean_met = ROOT.RooRealVar("mean_met", "mean_met", 400, 300, 500)
-sigmal_met = ROOT.RooRealVar("sigmal_met", "sigmal_met", 80, 30, 200)
-sigmar_met = ROOT.RooRealVar("sigmar_met", "sigmar_met", 2, 0.5, 10)
-alphal_met = ROOT.RooRealVar("alphal_met","alphal_met", 4, 0.01, 10)
-nl_met = ROOT.RooRealVar("nl_met", "nl_met", 3, 1, 10)
-alphar_met = ROOT.RooRealVar("alphar_met","alphar_met", 5, 0.01, 10)
-nr_met = ROOT.RooRealVar("nr_met", "nr_met", 3, 1, 10)
-sig_dcb_met = ROOT.RooCrystalBall("sig_dcb_met", "sig_dcb_met", met, mean_met, sigmal_met, sigmar_met, alphal_met, nl_met, alphar_met, nr_met)
-
-# https://root.cern.ch/doc/v638/classRooGamma.html
-gamma_met = ROOT.RooRealVar("gamma_met", "gamma_met", 200, 10, 500) # gamma in ROOT = alpha on wikipedia
-beta_met = ROOT.RooRealVar("beta_met", "beta_met", 1.0, 0.5, 2.5) # wikipedia: beta = 0.5 to 1.0, beta in wikipedia = (1/beta) in ROOT, so 
-mu_met = ROOT.RooRealVar("mu_met", "mu_met", 0, 0, 1)
-sig_gamma_met = ROOT.RooGamma("sig_gamma_met", "sig_gamma_met", met, gamma_met, beta_met, mu_met)
-
-#Signal 1d mll model
+# Signal 1d mll model
 mean_mll = ROOT.RooRealVar("mean_mll", "mean_mll", 90, 85, 95)
 sigmal_mll = ROOT.RooRealVar("sigmal_mll", "sigmal_mll", 1.7, 0.1, 50)
 sigmar_mll = ROOT.RooRealVar("sigmar_mll", "sigmar_mll", 0.5, 0.1, 50)
@@ -201,71 +188,69 @@ alphar_mll = ROOT.RooRealVar("alphar_mll","alphar_mll", 0.16, 0.01, 50)
 nr_mll = ROOT.RooRealVar("nr_mll", "nr_mll", 73, 1, 200)
 sig_dcb_mll = ROOT.RooCrystalBall("sig_dcb_mll", "sig_dcb_mll", mll, mean_mll, sigmal_mll, sigmar_mll, alphal_mll, nl_mll, alphar_mll, nr_mll)
 
-#Signal 2D model: sigtot_mll_met_2dpdf = sig_smoid_met * spline
+# Signal 2D model: sigtot_mll_met_2dpdf = sig_dcb_mll * pdf_of_spline
 sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_dcb_mll_spline_met", "sigtot_dcb_mll_spline_met", [sig_dcb_mll, pdf_of_spline])
 
-###### 2D signal fit 
-signal_result = sigtot_mll_met_2dpdf.fitTo(sigdataset, RF.Save(), SumW2Error=True) #where dataset is RooDataSet
+# 2D signal unbinned fit 
+sig_result = sigtot_mll_met_2dpdf.fitTo(sigdataset, RF.Save(), SumW2Error=True) #where dataset is RooDataSet
 params = sigtot_mll_met_2dpdf.getParameters(sigdataset)
 
 print(params.Print("v"))
 
-#### BACKGROUND FIT to data in control region ######
 
-# Background fake mll model in MET dimension
-mu_fakemll_met = ROOT.RooRealVar('mu_fakemll_met', 'mu_fakemll_met', 225, 100, 300) 
-b_fakemll_met = ROOT.RooRealVar('b_fakemll_met', 'b_fakemll_met', 40, 5, 50) 
+###########################################################################
+# Declare the background 1D PDFs and multiply them into 2D PDFs
+###########################################################################
+# Background fake mll component in MET dimension
+mu_fakemll_met = ROOT.RooRealVar('mu_fakemll_met', 'mu_fakemll_met', 225, 100, 300)
+b_fakemll_met = ROOT.RooRealVar('b_fakemll_met', 'b_fakemll_met', 40, 5, 50)
 bkgfakemll_met = ROOT.RooGenericPdf("bkgfakemll_met", "bkgfakemll_met", "1/b_fakemll_met * exp(-(@0 - mu_fakemll_met)/b_fakemll_met - exp(-(@0 - mu_fakemll_met)/b_fakemll_met))",
-                        ROOT.RooArgList(met, mu_fakemll_met, b_fakemll_met))  
-# Background fake mll model in mll dimension: falling exponential (using this for now)
-a_fakemll_mll = ROOT.RooRealVar("a_fakemll_mll", "a_fakemll_mll", -0.03, -1, 1) 
+                        ROOT.RooArgList(met, mu_fakemll_met, b_fakemll_met))
+# Background fake mll component in mll dimensio
+a_fakemll_mll = ROOT.RooRealVar("a_fakemll_mll", "a_fakemll_mll", -0.03, -1, 1)
 bkgfakemll_mll = ROOT.RooExponential("bkgfakemll_mll", "bkgfakemll_mll", mll, a_fakemll_mll)
 #Background 2d fakemll model: bkgfakemll_mll_met_2dpdf = bkgfakemll_met * bkgfakemll_mll
 bkgfakemll_mll_met_2dpdf = ROOT.RooProdPdf("bkgfakemll_mll_met_2dpdf", "bkgfakemll_mll_met_2dpdf", [bkgfakemll_mll, bkgfakemll_met])
 
 
-#Background real mll model in met dimension
+# Background real mll component in MET dimension
 mu_realmll_met = ROOT.RooRealVar('mu_realmll_met', 'mu_realmll_met', 50, 30, 400)   # adequate value somewhere around 246 based on hand-drawn plots
 b_realmll_met = ROOT.RooRealVar('b_realmll_met', 'b_realmll_met', 40, 20, 100)    # adequate value somewhere around 41 based on hand-drawn plots
 bkgrealmll_met = ROOT.RooGenericPdf("bkgrealmll_met", "bkgrealmll_met", "1/b_realmll_met * exp(-(@0 - mu_realmll_met)/b_realmll_met - exp(-(@0 - mu_realmll_met)/b_realmll_met))",
-                        ROOT.RooArgList(met, mu_realmll_met, b_realmll_met))  
-# Background real mll model in mll dimension: use a simple Gaussian and get the values from the initial 1D fit
-bkg_mean_mll = ROOT.RooRealVar("bkg_mean_mll", "bkg_mean_mll", 90, 85, 95)
-# bkg_mean_mll.setVal(zpeak_mean.getVal())
-# bkg_mean_mll.setConstant(True)
-bkg_sigma_mll = ROOT.RooRealVar("bkg_sigma_mll", "bkg_sigma_mll", 2, 0.01, 10)
-# bkg_sigma_mll.setVal(zpeak_sigma.getVal())
-# bkg_sigma_mll.setConstant(True)
-bkgrealmll_sigma_mll = ROOT.RooGaussian("bkg_gaus_mll", "bkg_gaus_mll", mll, bkg_mean_mll, bkg_sigma_mll)
+                        ROOT.RooArgList(met, mu_realmll_met, b_realmll_met))
+# Background real mll component in mll dimension (parameters taken from initial fit)
+zpeak_file = ROOT.TFile.Open("initial_zPeak_fit_result.root", "READ")
+zpeak_result = zpeak_file.Get("zPeak_CRZ_fit_result")
+zpeak_mean_mll = zpeak_result.floatParsFinal().find("peak_mean_mll")
+zpeak_sigmal_mll = zpeak_result.floatParsFinal().find("peak_sigmal_mll")
+zpeak_sigmar_mll = zpeak_result.floatParsFinal().find("peak_sigmar_mll")
+zpeak_alphal_mll = zpeak_result.floatParsFinal().find("peak_alphal_mll")
+zpeak_nl_mll = zpeak_result.floatParsFinal().find("peak_nl_mll")
+zpeak_alphar_mll = zpeak_result.floatParsFinal().find("peak_alphar_mll")
+zpeak_nr_mll = zpeak_result.floatParsFinal().find("peak_nr_mll")
+for v in [zpeak_mean_mll, zpeak_sigmal_mll, zpeak_sigmar_mll, zpeak_alphal_mll, zpeak_nl_mll, zpeak_alphar_mll, zpeak_nr_mll]:
+    v.setConstant()
+bkgrealmll_mll = ROOT.RooCrystalBall("bkgrealmll_mll", "bkgrealmll_mll", mll, zpeak_mean_mll, zpeak_sigmal_mll, zpeak_sigmar_mll, zpeak_alphal_mll, zpeak_nl_mll, zpeak_alphar_mll, zpeak_nr_mll)
 
-#Background 2d realmll model: bkgrealmll_mll_met_2dpdf = bkgrealmll_met * bkgrealmll_dcb_mll
-bkgrealmll_mll_met_2dpdf = ROOT.RooProdPdf("bkgrealmll_mll_met_2dpdf", "bkgrealmll_mll_met_2dpdf", [bkgrealmll_sigma_mll, bkgrealmll_met])
+# Background real mll component: 2D PDF (product)
+bkgrealmll_mll_met_2dpdf = ROOT.RooProdPdf("bkgrealmll_mll_met_2dpdf", "bkgrealmll_mll_met_2dpdf", [bkgrealmll_mll, bkgrealmll_met])
 
-
-#Overall 2D bkg model: bkgtot_mll_met_2dpdf = bkgfakemet_mll_met_2dpdf + ratio_realmll * bkgrealmll_mll_met_2dpdf
+# Overall 2D bkg model: bkgtot_mll_met_2dpdf = ratio_realmll * bkgrealmll_mll_met_2dpdf + bkgfakemll_mll_met_2dpdf
 ratio_realmll = ROOT.RooRealVar("ratio_realmll", "ratio_realmll", 0.1, 0, 1)
 bkgtot_mll_met_2dpdf = ROOT.RooAddPdf("bkgtot_mll_met_2dpdf", "bkgtot_mll_met_2dpdf", [bkgrealmll_mll_met_2dpdf, bkgfakemll_mll_met_2dpdf], [ratio_realmll])
 
-###### Retrive cr data root file ########
-crfilepath = 'backgrounds.root'
-crfile = ROOT.TFile.Open(crfilepath, "READ")
-crtree = crfile.Get("event_tree")
-variables = ROOT.RooArgSet(mll, met)
-weight = ROOT.RooRealVar("weight_nominal_mm", "weight_nominal_mm", -1, 1)
-crdataset = ROOT.RooDataSet("crdataset", "crdataset", variables, ROOT.RooFit.Import(crtree), ROOT.RooFit.WeightVar(weight))
-
-### B only 2D fit to cr root file
-bkg_result = bkgtot_mll_met_2dpdf.fitTo(crdataset, RF.Save(), SumW2Error=True) #where dataset is RooDataSet
-params = bkgtot_mll_met_2dpdf.getParameters(crdataset)
-print(params.Print("v"))
+# Then fit met projection with ratio_realmll fixed
+bkg_result = bkgtot_mll_met_2dpdf.fitTo(bkgdataset, RF.Save(), RF.SumW2Error(True))
+params_bkg = bkgtot_mll_met_2dpdf.getParameters(bkgdataset)
+print(params_bkg.Print("v"))
 
 w = ROOT.RooWorkspace("workspace", "workspace")
 w.Import(sig_roohistpdf_met)
 w.Import(pdf_of_spline)
 
-f = ROOT.TFile("fitresult.root", "RECREATE")
-signal_result.Write("signal_result")
+f = ROOT.TFile("fitresult_modified.root", "RECREATE")
+sig_result.Write("sig_result")
 bkg_result.Write("bkg_result")
+zpeak_result.Write("zpeak_result")
 w.Write()
 f.Close()
-
