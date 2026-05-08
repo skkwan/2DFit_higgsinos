@@ -9,7 +9,7 @@ from array import array
 # Helper functions for spline (used for the signal MET)
 ##################################################
 # From https://gitlab.cern.ch/cms-l1-ad/coffea-dask-axol1tl-studies/-/blob/master/prepareDatacards.py?ref_type=heads
-def prune_knots_in_tiny_tail(knot_x, knot_y, tail_thresh=1e-4, min_keep=10):
+def prune_knots_in_tiny_tail(knot_x, knot_y, tail_thresh=1e-8, min_keep=10):
     """
     Reduce knot density in the very low-yield tail without truncating the domain.
     Keeps first knot, last knot, and enough interior knots.
@@ -129,14 +129,14 @@ centers = np.array([sig_met_hist.GetBinCenter(i) for i in range(1, nBins+1)], dt
 vals    = np.array([max(float(sig_met_hist.GetBinContent(i)), 0.0) for i in range(1, nBins+1)], dtype=np.float64)
 
 knot_avg_halfwidth_bins = 4
-min_y = 1e-4
+min_y = 1e-12
 l=1.0
-tail_thresh=1e-4
+tail_thresh=1e-3
 knot_x = make_knot_x(
     x_min=centers[0],
     x_max=centers[-1],
     n_knots=60,
-    power = 10.0, #higher number = more dense at low mass
+    power = 2, #higher number = more dense at low mass
     centers=centers,
 )
 #find y value for each knot (average over local bins)
@@ -152,12 +152,26 @@ for xx in knot_x:
 
 knot_x = np.array(knot_x, dtype=np.double)
 knot_y = np.array(knot_y, dtype=np.double)
-vx = ROOT.std.vector('double')(knot_x)
-vy = ROOT.std.vector('double')(knot_y)
 
-# knot_x, knot_y = prune_knots_in_tiny_tail(knot_x, knot_y, tail_thresh=tail_thresh, min_keep=2)
-knot_y_use = np.maximum(knot_y, min_y).astype(np.double)
-vy_use = ROOT.std.vector('double')(knot_y_use)
+# From Claude: Thin sentinel floor values: keep a floor-valued knot only if it is directly
+# adjacent to a non-floor knot. Removes long flat-zero plateaus that cause
+# the cubic spline to oscillate negative 
+is_floor = (knot_y <= min_y)
+keep = np.array([
+    i for i in range(len(knot_x))
+    if not is_floor[i]
+    or (i > 0 and not is_floor[i - 1])  # check point to the left (if we are not leftmost point), is it <floor?
+    or (i < len(knot_x) - 1 and not is_floor[i + 1]) # repeat for the point to the right
+])
+knot_x = knot_x[keep]
+knot_y = knot_y[keep]
+
+# knot_x, knot_y = prune_knots_in_tiny_tail(knot_x, knot_y, tail_thresh=tail_thresh)
+# knot_y_use = np.maximum(knot_y, min_y).astype(np.double)
+vx = ROOT.std.vector('double')(knot_x)
+vy_use = ROOT.std.vector('double')(knot_y)
+
+print(list(zip(vx, vy_use)))
 
 spline = ROOT.RooSpline(
         "spline", "spline",
@@ -169,7 +183,7 @@ spline = ROOT.RooSpline(
 
 pdf_of_spline = ROOT.RooGenericPdf(
     "pdf_of_spline", "pdf_of_spline",
-    "max(@0, 1e-9)",    # prevent the interpolation from going 0 or negative
+    "max(@0, 1e-12)",    # prevent the interpolation from going 0 or negative
     ROOT.RooArgList(spline)
 )
 
