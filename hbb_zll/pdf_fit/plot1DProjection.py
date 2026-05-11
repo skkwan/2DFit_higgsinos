@@ -49,7 +49,7 @@ variablesInfo = [
     # ["weightXyear", "WeightXyear", 40, 0., 10.],
 ]
 
-resultsfile = ROOT.TFile.Open("fitresult_modified.root", "READ")
+resultsfile = ROOT.TFile.Open("fitresult.root", "READ")
 workspace = resultsfile.Get("workspace")
 sig_results = resultsfile.Get("sig_result")
 bkg_results = resultsfile.Get("bkg_result")

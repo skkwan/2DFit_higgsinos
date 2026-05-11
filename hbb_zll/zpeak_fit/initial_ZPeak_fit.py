@@ -24,28 +24,12 @@ peak_dcb_mll = ROOT.RooCrystalBall("peak_dcb_mll", "peak_dcb_mll", mll, peak_mea
 
 
 ###### Retrive cr data root file ########
-crfilepath = 'backgrounds_CRZ_Zpeak_2018_mm.root'
+crfilepath = 'backgrounds_CRZ_Zpeak_2018.root'
 crfile = ROOT.TFile.Open(crfilepath, "READ")
 crtree = crfile.Get("event_tree")
 variables = ROOT.RooArgSet(mll)
-weight = ROOT.RooRealVar("weight_nominal_mm", "weight_nominal_mm", -1, 1)
+weight = ROOT.RooRealVar("weight_nominal", "weight_nominal", -1, 1)
 crdataset = ROOT.RooDataSet("crdataset", "crdataset", variables, ROOT.RooFit.Import(crtree), ROOT.RooFit.WeightVar(weight))
-
-
-# TODO: switch to fitting histograms:
-# hist = crfile.Get("your_hist_name") 
-# datahist = ROOT.RooDataHist(
-#     "datahist",
-#     "datahist",
-#     ROOT.RooArgList(mll),
-#     hist
-# )
-# fit_result = bkgrealmll_mll.fitTo(
-#     datahist,
-#     RF.Save(),
-#     RF.SumW2Error(True)   # important if histogram has weights
-# )
-
 
 ### B only 2D fit to cr root file
 zPeak_CRZ_fit_result = peak_dcb_mll.fitTo(crdataset, RF.Save(), SumW2Error=True) #where dataset is RooDataSet

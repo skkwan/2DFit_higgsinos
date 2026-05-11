@@ -26,12 +26,12 @@ def getTChainRDF(listOfFiles: list[str], treeName: str) -> tuple[ROOT.TChain, RO
     df = ROOT.RDataFrame(ch, {"m_ll", "met", "weight_mm_nominal"})
     return ch, df
 
-block = [ "backgrounds_CRZ_Zpeak_2018_mm.root" ]
+block = [ "backgrounds_CRZ_Zpeak_2018.root" ]
 ch, df = getTChainRDF(block, "event_tree")
 
 
 mll = ROOT.RooRealVar("m_ll", "m_ll", 60, 120) 
-weightXyear = ROOT.RooRealVar("weight_nominal_mm", "weight_nominal_mm", -1, 1)
+weightXyear = ROOT.RooRealVar("weight_nominal", "weight_nominal", -1, 1)
 
 variablesInfo = [
     ["mll", "m(ll) / GeV", 60, 60., 120., mll],
@@ -59,7 +59,7 @@ peak_dcb_mll = ROOT.RooCrystalBall("peak_dcb_mll", "peak_dcb_mll", mll, peak_mea
 
 
 ###### Retrive cr data root file ########
-crfilepath = 'backgrounds_CRZ_Zpeak_2018_mm.root'
+crfilepath = 'backgrounds_CRZ_Zpeak_2018.root'
 crfile = ROOT.TFile.Open(crfilepath, "READ")
 crtree = crfile.Get("event_tree")
 variables = ROOT.RooArgSet(mll, weightXyear)

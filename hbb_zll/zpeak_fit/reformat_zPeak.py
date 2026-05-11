@@ -52,14 +52,17 @@ os.system(hadd_ee)
 tree_name = "event_tree"
 
 rdf_mm = ROOT.RDataFrame(tree_name, "backgrounds_CRZ_Zpeak_2018_mm.root")
-rdf_mm.Define("weight_nominal", "weight_nominal_ee") \
+rdf_mm.Define("weight_nominal", "weight_nominal_mm") \
       .Snapshot(tree_name, "backgrounds_CRZ_Zpeak_2018_mm_fixed.root")
 
 rdf_ee = ROOT.RDataFrame(tree_name, "backgrounds_CRZ_Zpeak_2018_ee.root")
-rdf_ee.Define("weight_nominal", "weight_nominal_mm") \
+rdf_ee.Define("weight_nominal", "weight_nominal_ee") \
       .Snapshot(tree_name, "backgrounds_CRZ_Zpeak_2018_ee_fixed.root")
 
 # Combine fixed files into a single file
 hadd_combined = "hadd -f -j -k backgrounds_CRZ_Zpeak_2018.root backgrounds_CRZ_Zpeak_2018_mm_fixed.root backgrounds_CRZ_Zpeak_2018_ee_fixed.root"
 print(hadd_combined)
 os.system(hadd_combined)
+
+# Clean up
+os.system("rm *mm*.root *ee*.root")
