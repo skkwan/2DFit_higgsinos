@@ -65,6 +65,26 @@ samples_signal = {
     ]
 }
 
+def count_yield(class_list):
+    """Return total weighted yield for a list of sample classes (e.g. ["DYJets", "TTZ_peak"]).
+    mm ntuples are weighted by weight_nominal_mm, ee ntuples by weight_nominal_ee."""
+    total = 0.0
+    for cls in class_list:
+        if cls not in samples:
+            raise ValueError(f"Unknown sample class: {cls}")
+        for s in samples[cls]:
+            mm_files = glob.glob(f"{basedir}/{s}/snapshot*mm_SR_mll_MET_fit_scheme.root")
+            ee_files = glob.glob(f"{basedir}/{s}/snapshot*ee_SR_mll_MET_fit_scheme.root")
+            if mm_files:
+                total += ROOT.RDataFrame(tree_name, mm_files).Sum("weight_nominal_mm").GetValue()
+            if ee_files:
+                total += ROOT.RDataFrame(tree_name, ee_files).Sum("weight_nominal_ee").GetValue()
+    return total
+
+peaking_yield = count_yield(["DYJets", "TTZ_peak"])
+nonpeaking_yield = count_yield(["WJets", "ttbar", "TTZ_nonpeak", "TTW", "WH", "ZH", "WZ", "WW", "ZZ"])
+frac = (peaking_yield)/(peaking_yield + nonpeaking_yield)
+print(f"Counted {peaking_yield} events (weighted) in peaking background and {nonpeaking_yield} (weighted) in non-peaking background. So the peaking background is {frac} of the total background")
 bkg_list_mm = []
 bkg_list_ee = []
 

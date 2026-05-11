@@ -162,7 +162,7 @@ bkgrealmll_mll = ROOT.RooCrystalBall("bkgrealmll_mll", "bkgrealmll_mll", mll, zp
 #Background 2d realmll model: bkgrealmll_mll_met_2dpdf = bkgrealmll_met * bkgrealmll_mll
 bkgrealmll_mll_met_2dpdf = ROOT.RooProdPdf("bkgrealmll_mll_met_2dpdf", "bkgrealmll_mll_met_2dpdf", [bkgrealmll_mll, bkgrealmll_met])
 
-#Overall 2D bkg model: bkgtot_mll_met_2dpdf = bkgfakemll_mll_met_2dpdf + ratio_realmll * bkgrealmll_mll_met_2dpdf
+#Overall 2D bkg model: bkgtot_mll_met_2dpdf = ratio * bkgrealmll_mll_met_2dpdf + (1 - ratio) bkgfakemll_mll_met_2dpdf
 ratio_realmll = bkg_results.floatParsFinal().find("ratio_realmll")
 
 bkgtot_mll_met_2dpdf = ROOT.RooAddPdf("bkgtot_mll_met_2dpdf", "bkgtot_mll_met_2dpdf", [bkgrealmll_mll_met_2dpdf, bkgfakemll_mll_met_2dpdf], [ratio_realmll])
