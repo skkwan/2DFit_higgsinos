@@ -87,7 +87,7 @@ dPdf["bkg"]["hist_mll"]["color"] = ROOT.TColor.GetColor("#e42536") # red
 dPdf["bkg"]["hist_mll"]["label"] = "Z-peak fit (DCB)"
 dPdf["bkg"]["hist_mll"]["name"] = "bkg_zPeak"
 dPdf["bkg"]["hist_mll"]["linestyle"] = 1
-dPdf["bkg"]["hist_mll"]["ymax"] = 30000
+dPdf["bkg"]["hist_mll"]["ymax"] = 50000
 
 if doLog:
     dPdf["bkg"]["hist_mll"]["ymax"] = 30000000
@@ -115,7 +115,7 @@ for varInfo in variablesInfo:
     # Plot both signal and background points
     for key in d:
         # Each variable only needs one frame
-        frame = rooVar.frame(40)
+        frame = rooVar.frame(nBins)
 
 
         print("Doing", key)
@@ -124,8 +124,14 @@ for varInfo in variablesInfo:
 
         CMS.SetLumi("")
 
+        d[key][f"hist_{variable}"] = {}
+        d[key][f"hist_{variable}"]["var"] = dPdf[key][f"hist_{variable}"]["var"]
+        d[key][f"hist_{variable}"]["obj"] = d[key]["dataset"].createHistogram("histo", rooVar, ROOT.RooFit.Binning(nBins, xmin, xmax))
+
         y_min = 0
-        y_max = dPdf[key][f"hist_{variable}"]["ymax"]
+        y_max = d[key][f"hist_{variable}"]["obj"].GetMaximum() * 1.4
+        if doLog:
+            y_max = d[key][f"hist_{variable}"]["obj"].GetMaximum() * 1e3
         if doLog:
             y_min = 1e-10
             y_max = y_max * 1000
@@ -158,10 +164,6 @@ for varInfo in variablesInfo:
                                     ROOT.RooFit.LineWidth(d[key]["linewidth"]),
                                     ROOT.RooFit.MarkerColor(d[key]["color"]),
                                     ROOT.RooFit.MarkerSize(1))
-        # Hodgepodge of arguments
-        d[key][f"hist_{variable}"] = {}
-        d[key][f"hist_{variable}"]["var"] = dPdf[key][f"hist_{variable}"]["var"] # copy from dPdf
-        d[key][f"hist_{variable}"]["obj"] = d[key]["dataset"].createHistogram("histo", d[key][f"hist_{variable}"]["var"], ROOT.RooFit.Binning(nBins, xmin, xmax))
         leg.AddEntry(frame.findObject(d[key]["name"]), d[key]["label"])
 
         # Plot the PDF with the fitted parameters
@@ -210,7 +212,7 @@ for varInfo in variablesInfo:
 
         CMS.UpdatePad(canv)
 
-        outdir = f"/eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D"
+        outdir = f"/eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/zpeak_fit"
         sampleName = d[key]["name"]
         plotname = f"zPeak-{sampleName}-{variable}"
         if doLog:
