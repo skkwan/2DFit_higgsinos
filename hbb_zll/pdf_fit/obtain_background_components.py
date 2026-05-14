@@ -1,0 +1,156 @@
+# Run in ROOT 6.38 (do not do cmsenv)
+
+import os
+import ROOT
+from ROOT import RooFit as RF
+import numpy as np
+from array import array
+import cmsstyle as CMS
+
+doLog = True
+
+# From Claude
+def plotMETFit(rooVar, dataset, pdf, dataLabel, fitLabel, plotname, outdir=""):
+    nBins = 50
+    xmin = rooVar.getMin()
+    xmax = rooVar.getMax()
+
+    frame = rooVar.frame(nBins)
+
+    leg = CMS.cmsLeg(0.5, 0.89 - 0.05 * 3, 0.9, 0.89, textSize=0.03)
+    leg.SetHeader("Z(ll)H(bb): MET fit")
+    CMS.SetLumi("")
+
+    data_hist = dataset.createHistogram("histo_" + plotname, rooVar, ROOT.RooFit.Binning(nBins, xmin, xmax))
+    y_min = 0
+    y_max = 1.8 * data_hist.GetMaximum()
+    if doLog:
+        y_min = 1e-10
+        y_max = y_max * 1000
+
+    canv = CMS.cmsDiCanvas("canv_" + plotname, x_min=xmin, x_max=xmax, y_min=y_min, y_max=y_max,
+                           r_min=0, r_max=2,
+                           nameXaxis="MET / GeV",
+                           nameYaxis="Shape (A.U.)",
+                           nameRatio="MC/Pred",
+                           square=CMS.kSquare, iPos=0)
+    canv.SetRightMargin(0.05)
+    CMS.UpdatePad(canv)
+
+    canv.cd(1)
+    if doLog:
+        ROOT.gPad.SetLogy()
+    CMS.UpdatePad(canv)
+
+    dataset.plotOn(frame, ROOT.RooFit.Name("data_" + plotname),
+                   ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#9c9ca1")),
+                   ROOT.RooFit.LineWidth(2),
+                   ROOT.RooFit.MarkerColor(ROOT.TColor.GetColor("#9c9ca1")),
+                   ROOT.RooFit.MarkerSize(1),
+                   ROOT.RooFit.Binning(nBins))
+    leg.AddEntry(frame.findObject("data_" + plotname), dataLabel)
+
+    pdf.plotOn(frame, ROOT.RooFit.Name("pdf_" + plotname),
+               ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#bd1f01")),
+               ROOT.RooFit.LineWidth(2),
+               ROOT.RooFit.LineStyle(1),
+               ROOT.RooFit.MarkerSize(0),
+               ROOT.RooFit.Binning(nBins))
+    leg.AddEntry(frame.findObject("pdf_" + plotname), fitLabel)
+
+    roo_curve = frame.getCurve("pdf_" + plotname)
+    frame.Draw("SAME")
+
+    # Ratio plot
+    canv.cd(2)
+    data_ratio = data_hist.Clone()
+    prediction = data_hist.Clone()
+    for i in range(1, data_ratio.GetNbinsX() + 1):
+        thisXval = data_ratio.GetBinCenter(i)
+        pdfY = roo_curve.Eval(thisXval)
+        prediction.SetBinContent(i, pdfY)
+    data_ratio.Divide(prediction)
+    data_ratio.SetMarkerColor(ROOT.kBlack)
+    data_ratio.SetLineColor(ROOT.kBlack)
+    CMS.cmsObjectDraw(data_ratio, "E", MarkerStyle=ROOT.kFullCircle)
+    unitLine = ROOT.TLine(xmin, 1.0, xmax, 1.0)
+    unitLine.SetLineColor(ROOT.kBlack)
+    unitLine.SetLineWidth(1)
+    unitLine.Draw("SAME")
+
+    canv.cd(1)
+    CMS.cmsObjectDraw(leg)
+    CMS.UpdatePad(canv)
+
+    fname = plotname + ("-log" if doLog else "")
+    canv.SaveAs(f"{fname}.pdf")
+    canv.SaveAs(f"{fname}.png")
+    if outdir:
+        os.system(f"mv {fname}.* {outdir}")
+
+    del canv
+    del leg
+
+
+##################################################
+##### Define fit observables 
+##################################################
+mll = ROOT.RooRealVar("m_ll", "m_ll", 60, 120)
+met = ROOT.RooRealVar("met", "met", 200, 1200)
+
+##################################################
+###### Retrieve background dataset (prepared with reformat.py)
+##################################################
+bkg_peaking_filepath = 'backgrounds_peaking.root'
+bkg_nonpeak_filepath = 'backgrounds_nonpeak.root'
+bkg_peaking_file = ROOT.TFile.Open(bkg_peaking_filepath, "READ")
+bkg_nonpeak_file = ROOT.TFile.Open(bkg_nonpeak_filepath, "READ")
+
+bkg_peaking_tree = bkg_peaking_file.Get("event_tree")
+bkg_nonpeak_tree = bkg_nonpeak_file.Get("event_tree")
+
+weightXyear = ROOT.RooRealVar("weight_nominal", "weight_nominal", -1, 1)
+variables = ROOT.RooArgSet(mll, met, weightXyear)
+
+###########################################################################
+# MET: Declare the background 1D PDFs and multiply them into 2D PDFs
+###########################################################################
+# First do NON-peaking background by itself
+bkg_nonpeak_dataset = ROOT.RooDataSet("bkg_nonpeak_dataset", "bkg_nonpeak_dataset", ROOT.RooArgSet(met, weightXyear), ROOT.RooFit.Import(bkg_nonpeak_tree), ROOT.RooFit.WeightVar(weightXyear))
+# Background fake mll component in MET dimension
+mu_nonpeak_met = ROOT.RooRealVar('mu_nonpeak_met', 'mu_nonpeak_met', 225, 100, 300)
+b_nonpeak_met = ROOT.RooRealVar('b_nonpeak_met', 'b_nonpeak_met', 40, 5, 50)
+bkg_nonpeak_met_pdf = ROOT.RooGenericPdf("bkgfakemll_met", "bkgfakemll_met", "1/b_nonpeak_met * exp(-(@0 - mu_nonpeak_met)/b_nonpeak_met - exp(-(@0 - mu_nonpeak_met)/b_nonpeak_met))",
+                        ROOT.RooArgList(met, mu_nonpeak_met, b_nonpeak_met))
+# Fit and get results
+bkg_nonpeak_result = bkg_nonpeak_met_pdf.fitTo(bkg_nonpeak_dataset, RF.Save(), RF.SumW2Error(True))
+bkg_nonpeak_params = bkg_nonpeak_met_pdf.getParameters(bkg_nonpeak_dataset)
+print(bkg_nonpeak_params.Print("v"))
+
+# Then do PEAKING background by itself
+bkg_peaking_dataset = ROOT.RooDataSet("bkg_peaking_dataset", "bkg_peaking_dataset", ROOT.RooArgSet(met, weightXyear), ROOT.RooFit.Import(bkg_peaking_tree), ROOT.RooFit.WeightVar(weightXyear))
+mu_peaking_met = ROOT.RooRealVar('mu_peaking_met', 'mu_peaking_met', 50, 30, 400)   # adequate value somewhere around 246 based on hand-drawn plots
+b_peaking_met = ROOT.RooRealVar('b_peaking_met', 'b_peaking_met', 40, 20, 100)    # adequate value somewhere around 41 based on hand-drawn plots
+bkg_peaking_met_pdf = ROOT.RooGenericPdf("bkgrealmll_met", "bkgrealmll_met", "1/b_peaking_met * exp(-(@0 - mu_peaking_met)/b_peaking_met - exp(-(@0 - mu_peaking_met)/b_peaking_met))",
+                        ROOT.RooArgList(met, mu_peaking_met, b_peaking_met))
+# Fit
+bkg_peaking_result = bkg_peaking_met_pdf.fitTo(bkg_peaking_dataset, RF.Save(), RF.SumW2Error(True))
+bkg_peaking_params = bkg_peaking_met_pdf.getParameters(bkg_peaking_dataset)
+print(bkg_peaking_params.Print("v"))
+
+f = ROOT.TFile("fitresult_background_MET.root", "RECREATE")
+bkg_nonpeak_result.Write("bkg_nonpeak_result")
+bkg_peaking_result.Write("bkg_peaking_result")
+f.Close()
+
+plotMETFit(met, bkg_nonpeak_dataset, bkg_nonpeak_met_pdf,
+           "Non-peaking bkg",
+           f"Gumbel fit (#mu={mu_nonpeak_met.getVal():.1f}#pm{mu_nonpeak_met.getError():.1f}, b={b_nonpeak_met.getVal():.1f}#pm{b_nonpeak_met.getError():.1f})",
+           "bkg_nonpeak_met_gumbel")
+plotMETFit(met, bkg_peaking_dataset, bkg_peaking_met_pdf,
+           "Peaking bkg",
+           f"Gumbel fit (#mu={mu_peaking_met.getVal():.1f}#pm{mu_peaking_met.getError():.1f}, b={b_peaking_met.getVal():.1f}#pm{b_peaking_met.getError():.1f})",
+           "bkg_peaking_met_gumbel")
+
+os.system("mv *.png /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/background_shapes")
+os.system("mv *.pdf /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/background_shapes")
