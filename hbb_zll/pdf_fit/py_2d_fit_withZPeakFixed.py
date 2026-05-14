@@ -116,7 +116,7 @@ bkgdataset = ROOT.RooDataSet("bkgdataset", "bkgdataset", variables, ROOT.RooFit.
 # Declare the signal 1D PDFs and multiply them into 2D PDFs
 ###########################################################################
 # Get TH1 of signal met: https://github.com/guitargeek/hasco-2023-root/blob/main/notebooks/roofit-tutorial-01.ipynb 
-sig_met_hist = ROOT.TH1D("sig_met_hist", "sig_met_hist", 120, 0, 1200)
+sig_met_hist = ROOT.TH1D("sig_met_hist", "sig_met_hist", 40, 0, 1200)
 sigtree.Draw("met >> sig_met_hist")
 # Convert TH1 into RooDataHist
 sig_roo_template_hist = ROOT.RooDataHist("sig_roo_template_hist", "sig_roo_template_hist", met, sig_met_hist)
@@ -128,17 +128,25 @@ nBins = sig_met_hist.GetNbinsX()
 centers = np.array([sig_met_hist.GetBinCenter(i) for i in range(1, nBins+1)], dtype=np.float64)
 vals    = np.array([max(float(sig_met_hist.GetBinContent(i)), 0.0) for i in range(1, nBins+1)], dtype=np.float64)
 
-knot_avg_halfwidth_bins = 4
-min_y = 1e-12
-l=1.0
+knot_avg_halfwidth_bins = 2
+min_y = 1e-8
 tail_thresh=1e-3
+
+# Restrict knots to non-zero bins so spline is never built over the MET values where the signal is less than min_y
+mask = np.array(vals > min_y)
+centers_nz = centers[mask]
+vals_nz    = vals[mask]
+first_knot_x = float(centers_nz[0])
+print(f"First non-zero bin: {first_knot_x:.1f} GeV  (masked out {np.sum(~mask)} zero bins)")
+
 knot_x = make_knot_x(
     x_min=centers[0],
     x_max=centers[-1],
-    n_knots=60,
-    power = 2, #higher number = more dense at low mass
+    n_knots=240,
+    power=2, #higher number = more dense at low mass
     centers=centers,
 )
+print("knot_x:", knot_x)
 #find y value for each knot (average over local bins)
 knot_y = []
 for xx in knot_x:
@@ -149,43 +157,38 @@ for xx in knot_x:
     yk = float(np.mean(local)) if local.size else float(vals[ib])
     knot_y.append(max(yk, min_y))
 
-
 knot_x = np.array(knot_x, dtype=np.double)
 knot_y = np.array(knot_y, dtype=np.double)
 
-# From Claude: Thin sentinel floor values: keep a floor-valued knot only if it is directly
-# adjacent to a non-floor knot. Removes long flat-zero plateaus that cause
-# the cubic spline to oscillate negative 
-is_floor = (knot_y <= min_y)
-keep = np.array([
-    i for i in range(len(knot_x))
-    if not is_floor[i]
-    or (i > 0 and not is_floor[i - 1])  # check point to the left (if we are not leftmost point), is it <floor?
-    or (i < len(knot_x) - 1 and not is_floor[i + 1]) # repeat for the point to the right
-])
-knot_x = knot_x[keep]
-knot_y = knot_y[keep]
 
 # knot_x, knot_y = prune_knots_in_tiny_tail(knot_x, knot_y, tail_thresh=tail_thresh)
 # knot_y_use = np.maximum(knot_y, min_y).astype(np.double)
 vx = ROOT.std.vector('double')(knot_x)
 vy_use = ROOT.std.vector('double')(knot_y)
 
-print(list(zip(vx, vy_use)))
+print("Zipped:", list(zip(vx, vy_use)))
 
 spline = ROOT.RooSpline(
         "spline", "spline",
         met,
         vx,
         vy_use,
-        order=3
+        order=3,
     )
 
+# pdf_of_spline = ROOT.RooGenericPdf(
+#     "pdf_of_spline", "pdf_of_spline",
+#     "max(@0, 1e-12)",    # prevent the interpolation from going 0 or negative
+#     ROOT.RooArgList(spline)
+# )
+
+# Step clamp: PDF is exactly 1e-12 below the first knot, preventing wild extrapolation
 pdf_of_spline = ROOT.RooGenericPdf(
     "pdf_of_spline", "pdf_of_spline",
-    "max(@0, 1e-12)",    # prevent the interpolation from going 0 or negative
-    ROOT.RooArgList(spline)
+    f"(@1 < {first_knot_x}) ? 1e-12 : max(@0, 1e-12)",
+    ROOT.RooArgList(spline, met)
 )
+
 
 # # Also keep a RooHistPdf for reference
 # sig_roo_template_hist = ROOT.RooDataHist("sig_roo_template_hist", "sig_roo_template_hist", ROOT.RooArgSet(met), sig_met_hist)
@@ -260,6 +263,7 @@ print(params_bkg.Print("v"))
 w = ROOT.RooWorkspace("workspace", "workspace")
 w.Import(sig_roohistpdf_met)
 w.Import(pdf_of_spline)
+# w.Import(spline)
 
 f = ROOT.TFile("fitresult.root", "RECREATE")
 sig_result.Write("sig_result")

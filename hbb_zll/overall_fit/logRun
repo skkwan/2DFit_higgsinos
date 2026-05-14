@@ -1,0 +1,107 @@
+[#1] INFO:DataHandling -- RooAbsReal::attachToTree(m_ll) TTree Float_t branch m_ll will be converted to double precision.
+[#1] INFO:DataHandling -- RooAbsReal::attachToTree(met) TTree Float_t branch met will be converted to double precision.
+[#1] INFO:DataHandling -- RooAbsReal::attachToTree(weight_nominal) TTree Float_t branch weight_nominal will be converted to double precision.
+[#1] INFO:Fitting -- RooAbsPdf::fitTo(model_2dpdf) fixing normalization set for coefficient determination to observables in data
+[#1] INFO:Fitting -- using generic CPU library compiled with no vectorizations
+[#1] INFO:Fitting -- Creation of NLL object took 18.3292 ms
+[#1] INFO:Fitting -- RooAddition::defaultErrorLevel(nll_model_2dpdf_combdataset) Summation contains a RooNLLVar, using its error level
+[#1] INFO:Minimization -- RooAbsMinimizerFcn::setOptimizeConst: activating const optimization
+[#1] INFO:Minimization -- [fitFCN] No discrete parameters, performing continuous minimization only
+Minuit2Minimizer: Minimize with max-calls 1500 convergence for edm < 1 strategy 1
+[#1] INFO:NumericIntegration -- RooRealIntegral::init(bkgfakemll_met_Int[met]) using numeric integrator RooIntegrator1D to calculate Int(met)
+[#1] INFO:NumericIntegration -- RooRealIntegral::init(bkgrealmll_met_Int[met]) using numeric integrator RooIntegrator1D to calculate Int(met)
+[#1] INFO:NumericIntegration -- RooRealIntegral::init(pdf_of_spline_Int[met]) using numeric integrator RooIntegrator1D to calculate Int(met)
+Minuit2Minimizer : Valid minimum - status = 0
+FVAL  = 163.033980472664382
+Edm   = 0.000302171237629004152
+Nfcn  = 45
+n_bkg	  = 19.0111	 +/-  4.76239	(limited)
+n_sig	  = 2.74371	 +/-  2.53982	(limited)
+ratio_realmll	  = 0.118638	 +/-  0.180252	(limited)
+[#1] INFO:Fitting -- RooAbsPdf::fitTo(model_2dpdf) Calculating sum-of-weights-squared correction matrix for covariance matrix
+[#1] INFO:Minimization -- RooAbsMinimizerFcn::setOptimizeConst: deactivating const optimization
+
+  RooFitResult: minimized FCN value: 163.034, estimated distance to minimum: 0.0424493
+                covariance matrix quality: Full, accurate covariance matrix
+                Status : MINIMIZE=0 HESSE=0 HESSE=0 
+
+    Constant Parameter    Value     
+  --------------------  ------------
+         a_fakemll_mll   -1.2218e-02
+            alphal_mll    1.3149e+00
+            alphar_mll    1.1082e+00
+         b_fakemll_met    3.6646e+01
+         b_realmll_met    6.6434e+01
+              mean_mll    9.0966e+01
+        mu_fakemll_met    2.4224e+02
+        mu_realmll_met    2.7880e+02
+                nl_mll    2.7808e+00
+                nr_mll    2.6688e+00
+       peak_alphal_mll    1.3486e+00
+       peak_alphar_mll    1.2499e+00
+         peak_mean_mll    9.1140e+01
+           peak_nl_mll    1.4985e+00
+           peak_nr_mll    2.2502e+00
+       peak_sigmal_mll    2.4591e+00
+       peak_sigmar_mll    1.9285e+00
+            sigmal_mll    2.4170e+00
+            sigmar_mll    2.0077e+00
+
+    Floating Parameter  InitialValue    FinalValue +/-  Error     GblCorr.
+  --------------------  ------------  --------------------------  --------
+                 n_bkg    1.9664e+01    1.9011e+01 +/-  9.30e-01  <none>
+                 n_sig    2.1848e+00    2.7437e+00 +/-  5.01e-01  <none>
+         ratio_realmll    1.0000e-01    1.1864e-01 +/-  4.73e-02  <none>
+
+[#1] INFO:Plotting -- RooAbsPdf::plotOn(model_2dpdf) directly selected PDF components: (sigtot_mll_met_2dpdf)
+[#1] INFO:Plotting -- RooAbsPdf::plotOn(model_2dpdf) indirectly selected PDF components: (sig_dcb_mll,pdf_of_spline,spline)
+[#1] INFO:Plotting -- RooAbsPdf::plotOn(model_2dpdf) directly selected PDF components: (bkgtot_mll_met_2dpdf)
+[#1] INFO:Plotting -- RooAbsPdf::plotOn(model_2dpdf) indirectly selected PDF components: (bkgrealmll_mll_met_2dpdf,bkgrealmll_mll,bkgrealmll_met,bkgfakemll_mll_met_2dpdf,bkgfakemll_mll,bkgfakemll_met)
+[#1] INFO:InputArguments -- RooAbsData::plotOn(combdataset) INFO: dataset has non-integer weights, auto-selecting SumW2 errors instead of Poisson errors
+[#1] INFO:Plotting -- RooPlot::updateFitRangeNorm: New event count of 21.8484 will supersede previous event count of 1 for normalization of PDF projections
+[#1] INFO:NumericIntegration -- RooRealIntegral::init(pdf_of_spline_Int[met]) using numeric integrator RooIntegrator1D to calculate Int(met)
+[#1] INFO:NumericIntegration -- RooRealIntegral::init(bkgrealmll_met_Int[met]) using numeric integrator RooIntegrator1D to calculate Int(met)
+[#1] INFO:NumericIntegration -- RooRealIntegral::init(bkgfakemll_met_Int[met]) using numeric integrator RooIntegrator1D to calculate Int(met)
+[#1] INFO:Plotting -- RooAbsPdf::plotOn(model_2dpdf) directly selected PDF components: (sigtot_mll_met_2dpdf)
+[#1] INFO:Plotting -- RooAbsPdf::plotOn(model_2dpdf) indirectly selected PDF components: (sig_dcb_mll,pdf_of_spline,spline)
+[#1] INFO:NumericIntegration -- RooRealIntegral::init(pdf_of_spline_Int[met]) using numeric integrator RooIntegrator1D to calculate Int(met)
+[#1] INFO:NumericIntegration -- RooRealIntegral::init(bkgrealmll_met_Int[met]) using numeric integrator RooIntegrator1D to calculate Int(met)
+[#1] INFO:NumericIntegration -- RooRealIntegral::init(bkgfakemll_met_Int[met]) using numeric integrator RooIntegrator1D to calculate Int(met)
+[#1] INFO:Plotting -- RooAbsPdf::plotOn(model_2dpdf) directly selected PDF components: (bkgtot_mll_met_2dpdf)
+[#1] INFO:Plotting -- RooAbsPdf::plotOn(model_2dpdf) indirectly selected PDF components: (bkgrealmll_mll_met_2dpdf,bkgrealmll_mll,bkgrealmll_met,bkgfakemll_mll_met_2dpdf,bkgfakemll_mll,bkgfakemll_met)
+[#1] INFO:NumericIntegration -- RooRealIntegral::init(pdf_of_spline_Int[met]) using numeric integrator RooIntegrator1D to calculate Int(met)
+[#1] INFO:NumericIntegration -- RooRealIntegral::init(bkgrealmll_met_Int[met]) using numeric integrator RooIntegrator1D to calculate Int(met)
+[#1] INFO:NumericIntegration -- RooRealIntegral::init(bkgfakemll_met_Int[met]) using numeric integrator RooIntegrator1D to calculate Int(met)
+[#1] INFO:InputArguments -- RooAbsData::plotOn(combdataset) INFO: dataset has non-integer weights, auto-selecting SumW2 errors instead of Poisson errors
+[#1] INFO:Plotting -- RooPlot::updateFitRangeNorm: New event count of 21.8484 will supersede previous event count of 1 for normalization of PDF projections
+[#0] WARNING:Plotting -- RooHist::makeResisHist(data) WARNING: point 0 has zero error, setting residual to zero
+[#0] WARNING:Plotting -- RooHist::makeResisHist(data) WARNING: point 1 has zero error, setting residual to zero
+[#0] WARNING:Plotting -- RooHist::makeResisHist(data) WARNING: point 2 has zero error, setting residual to zero
+[#0] WARNING:Plotting -- RooHist::makeResisHist(data) WARNING: point 3 has zero error, setting residual to zero
+[#0] WARNING:Plotting -- RooHist::makeResisHist(data) WARNING: point 4 has zero error, setting residual to zero
+[#0] WARNING:Plotting -- RooHist::makeResisHist(data) WARNING: point 5 has zero error, setting residual to zero
+[#0] WARNING:Plotting -- RooHist::makeResisHist(data) WARNING: point 31 has zero error, setting residual to zero
+[#0] WARNING:Plotting -- RooHist::makeResisHist(data) WARNING: point 32 has zero error, setting residual to zero
+[#0] WARNING:Plotting -- RooHist::makeResisHist(data) WARNING: point 34 has zero error, setting residual to zero
+[#0] WARNING:Plotting -- RooHist::makeResisHist(data) WARNING: point 36 has zero error, setting residual to zero
+[#0] WARNING:Plotting -- RooHist::makeResisHist(data) WARNING: point 38 has zero error, setting residual to zero
+
+Dataset loaded: 5179 entries, sum of weights = 21.85
+
+=== Fit result ===
+
+Signal yield:     2.7437 +/- 0.5007
+Background yield: 19.0111 +/- 0.9296
+Fit status: 0  (0 = OK)
+EDM:        4.245e-02
+Saved to fit2D_result_signal_plus_background.root
+Created mll_bkgAndSig_fit_to_SplusB.pdf / .png, copying to /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/overall-fit
+Created mll_bkgAndSig_fit_to_SplusB_logscale.pdf / .png, copying to /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/overall-fit
+Created met_bkgAndSig_fit_to_SplusB.pdf / .png, copying to /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/overall-fit
+Created met_bkgAndSig_fit_to_SplusB_logscale.pdf / .png, copying to /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/overall-fit
+TChiZH signal events:    1585
+TChiZH signal yield:     2.6119
+Background events:       3594
+Background yield:        19.2365
+Total events:            5179
+Total yield:             21.8483

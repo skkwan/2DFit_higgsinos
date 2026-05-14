@@ -2,7 +2,7 @@ import os, ROOT
 import cmsstyle as CMS
 import numpy as np
 
-doLog = True
+doLog = False
 
 def addOverflow(h: ROOT.TH1F) -> ROOT.TH1F:
     """
@@ -122,7 +122,6 @@ dPdf["signal"]["hist_mll"]["color"] = ROOT.TColor.GetColor("#f89c20") # light or
 dPdf["signal"]["hist_mll"]["label"] = "Signal 2D fit: 1D projection"
 dPdf["signal"]["hist_mll"]["name"] = "signal1Dproj_mll"
 dPdf["signal"]["hist_mll"]["linestyle"] = 1
-dPdf["signal"]["hist_mll"]["ymax"] = 0.6
 
 dPdf["signal"]["hist_met"]["var"] = met 
 dPdf["signal"]["hist_met"]["pdf"] = sigtot_mll_met_2dpdf
@@ -130,7 +129,6 @@ dPdf["signal"]["hist_met"]["color"] = ROOT.TColor.GetColor("#f89c20") # light or
 dPdf["signal"]["hist_met"]["label"] = "Signal 2D fit: 1D projection"
 dPdf["signal"]["hist_met"]["name"] = "signal1Dproj_met"
 dPdf["signal"]["hist_met"]["linestyle"] = 1
-dPdf["signal"]["hist_met"]["ymax"] = 0.4
 
 #Background real mll model in met dimension
 mu_fakemll_met = bkg_results.floatParsFinal().find("mu_fakemll_met")
@@ -177,8 +175,6 @@ dPdf["bkg"]["hist_mll"]["color"] = ROOT.TColor.GetColor("#964a8b") # purple
 dPdf["bkg"]["hist_mll"]["label"] = "Background 2D fit: 1D proj"
 dPdf["bkg"]["hist_mll"]["name"] = "bkg1Dproj"
 dPdf["bkg"]["hist_mll"]["linestyle"] = 1
-dPdf["bkg"]["hist_mll"]["ymax"] = 3
-
 
 dPdf["bkg"]["hist_met"]["var"] = met
 dPdf["bkg"]["hist_met"]["pdf"] = bkgtot_mll_met_2dpdf
@@ -186,7 +182,6 @@ dPdf["bkg"]["hist_met"]["color"] = ROOT.TColor.GetColor("#964a8b") # purple
 dPdf["bkg"]["hist_met"]["label"] = "Background 2D fit: 1D proj"
 dPdf["bkg"]["hist_met"]["name"] = "bkg1Dproj"
 dPdf["bkg"]["hist_met"]["linestyle"] = 1
-dPdf["bkg"]["hist_met"]["ymax"] = 5
 
 for varInfo in variablesInfo:
     variable = varInfo[0]
@@ -219,15 +214,14 @@ for varInfo in variablesInfo:
 
         CMS.SetLumi("")
 
+        # Create histogram first so y_max can be derived from the data
+        data_hist = d[key]["dataset"].createHistogram("histo", dPdf[key][f"hist_{variable}"]["var"], ROOT.RooFit.Binning(nBins, xmin, xmax))
         y_min = 0
-        y_max = dPdf[key][f"hist_{variable}"]["ymax"]
+        y_max = 1.8 * data_hist.GetMaximum()
         if doLog:
             y_min = 1e-10
             y_max = y_max * 1000
-        # print(y_maxima)
-        # example: https://cms-analysis.docs.cern.ch/guidelines/plotting/examples/?h=pad#stack-plot-with-cmsstyle
-        # documentation: https://cmsstyle.readthedocs.io/en/latest/reference/#cmsstyle.cmsstyle.cmsDiCanvas
-        canv = CMS.cmsDiCanvas(variable, x_min=xmin, x_max=xmax, y_min=y_min, y_max=y_max, # max(y_maxima) * 1.25,
+        canv = CMS.cmsDiCanvas(variable, x_min=xmin, x_max=xmax, y_min=y_min, y_max=y_max,
                             r_min=0,
                             r_max=2,
                             nameXaxis = xlabel,
@@ -254,10 +248,9 @@ for varInfo in variablesInfo:
                                     ROOT.RooFit.MarkerColor(d[key]["color"]),
                                     ROOT.RooFit.MarkerSize(1),
                                     ROOT.RooFit.Binning(nBins))
-        # Hodgepodge of arguments
         d[key][f"hist_{variable}"] = {}
         d[key][f"hist_{variable}"]["var"] = dPdf[key][f"hist_{variable}"]["var"] # copy from dPdf
-        d[key][f"hist_{variable}"]["obj"] = d[key]["dataset"].createHistogram("histo", d[key][f"hist_{variable}"]["var"], ROOT.RooFit.Binning(nBins, xmin, xmax))
+        d[key][f"hist_{variable}"]["obj"] = data_hist
         leg.AddEntry(frame.findObject(d[key]["name"]), d[key]["label"])
 
         # Plot the PDF with the fitted parameters
@@ -289,51 +282,23 @@ for varInfo in variablesInfo:
         data_ratio = d[key][f"hist_{variable}"]["obj"].Clone()
         prediction = d[key][f"hist_{variable}"]["obj"].Clone()
 
-        # First print 
+        # Claude: At each point in the TH1F, evaluate the pdf value via TGraph interpolation.
+        # findPoint() requires an exact match (tight tolerance) so it returns -1 for
+        # all bin centers that don't coincide with a curve knot, leaving prediction
+        # unchanged (= clone of data) and producing a flat ratio of 1.0 everywhere.
+        # TGraph::Eval() interpolates continuously and avoids this problem.
+        roo_curve = dPdf[key][f"hist_{variable}"]["HistFromFrame"]
         for i in range(1, data_ratio.GetNbinsX() + 1):
-            print(d[key][f"hist_{variable}"]["obj"].GetNbinsX(), d[key][f"hist_{variable}"]["obj"].GetBinCenter(i), d[key][f"hist_{variable}"]["obj"].GetBinContent(i))
-
-        # At each point in the TH1F, we need to evaluate the pdf value 
-        for i in range(1, data_ratio.GetNbinsX() + 1):
-            thisXval = data_ratio.GetXaxis().GetBinCenter(i)
-  
-            print("thisXVal is ", thisXval)
-
-            # if variable == "met":
-            #     met.setVal(thisXval)
-            #     norm_set = ROOT.RooArgSet(met)
-            # elif variable == "mll":
-            #     mll.setVal(thisXval)
-            #     norm_set = ROOT.RooArgSet(mll)
-
-            # fitY = projected_pdf.getVal(norm_set)
-            print(type(dPdf[key][f"hist_{variable}"]["HistFromFrame"]))
-            yArr = dPdf[key][f"hist_{variable}"]["HistFromFrame"].GetY()        
-            index = dPdf[key][f"hist_{variable}"]["HistFromFrame"].findPoint(thisXval)
-            pdfX = dPdf[key][f"hist_{variable}"]["HistFromFrame"].GetPointX(index)
-            pdfY = dPdf[key][f"hist_{variable}"]["HistFromFrame"].GetPointY(index)
-            print("Found index", index, "for xval", thisXval)
-
-            if (pdfX == -1):
-                continue
-
-            # fitX = curve.GetPointX(thisPoint)
-            # fitY = curve.GetPointY(thisPoint)
-            # print(f"Setting {variable} to {thisXval}")
-            if "variable" == "met" and "signal" in key:
-                # # RooHistPDF block 
-                # print("Signal met: special case")
-                # fitY = dPdf[key][f"hist_{variable}"]["name"].getVal(thisArgSet)
-                # # Spline block
-                fitY = spline.getVal(thisArgSet)
-
-            print(f"{variable}: At point {thisXval}, got point x = {pdfX}, y = {pdfY}, compare to data point x = {thisXval}, y = {data_ratio.GetBinContent(i)}")
+            thisXval = data_ratio.GetBinCenter(i)
+            pdfY = roo_curve.Eval(thisXval)
             prediction.SetBinContent(i, pdfY)
 
         data_ratio.Divide(prediction)
+        data_ratio.SetMarkerColor(ROOT.kBlack)
+        data_ratio.SetLineColor(ROOT.kBlack)
         CMS.cmsObjectDraw(data_ratio, "E", MarkerStyle=ROOT.kFullCircle)
         unitLine = ROOT.TLine(xmin, 1.0, xmax, 1.0)
-        unitLine.SetLineColor(ROOT.kBlack)
+        unitLine.SetLineColor(ROOT.kBlack)  
         unitLine.SetLineWidth(1)
         unitLine.Draw("SAME")
         canv.cd(1)
