@@ -10,7 +10,7 @@ import cmsstyle as CMS
 doLog = True
 
 # From Claude
-def plotMETFit(rooVar, dataset, pdf, dataLabel, fitLabel, plotname, outdir=""):
+def plotMETFit(rooVar, dataset, pdf, dataLabel, fitLabel, plotname, nFloatParams=2, outdir=""):
     nBins = 50
     xmin = rooVar.getMin()
     xmax = rooVar.getMax()
@@ -18,7 +18,6 @@ def plotMETFit(rooVar, dataset, pdf, dataLabel, fitLabel, plotname, outdir=""):
     frame = rooVar.frame(nBins)
 
     leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 4, 0.9, 0.89, textSize=0.04)
-    leg.SetHeader("2018 signal region MC: background MET")
     CMS.SetLumi("")
 
     data_hist = dataset.createHistogram("histo_" + plotname, rooVar, ROOT.RooFit.Binning(nBins, xmin, xmax))
@@ -59,6 +58,8 @@ def plotMETFit(rooVar, dataset, pdf, dataLabel, fitLabel, plotname, outdir=""):
     leg.AddEntry(frame.findObject("pdf_" + plotname), fitLabel)
 
     roo_curve = frame.getCurve("pdf_" + plotname)
+    chi2_per_ndf = frame.chiSquare("pdf_" + plotname, "data_" + plotname, nFloatParams)
+    leg.SetHeader(f"2018 SR: background MET (#chi^{{2}}/ndf = {chi2_per_ndf:.2f})")
     frame.Draw("SAME")
 
     # Ratio plot
@@ -77,6 +78,157 @@ def plotMETFit(rooVar, dataset, pdf, dataLabel, fitLabel, plotname, outdir=""):
     unitLine.SetLineColor(ROOT.kBlack)
     unitLine.SetLineWidth(1)
     unitLine.Draw("SAME")
+
+    canv.cd(1)
+    CMS.cmsObjectDraw(leg)
+    CMS.UpdatePad(canv)
+
+    fname = plotname + ("-log" if doLog else "")
+    canv.SaveAs(f"{fname}.pdf")
+    canv.SaveAs(f"{fname}.png")
+    if outdir:
+        os.system(f"mv {fname}.* {outdir}")
+
+    del canv
+    del leg
+
+
+def plotMETPDFTogether(rooVar, peaking_dataset, nonpeak_dataset,
+                       peaking_pdf, nonpeak_pdf, plotname, outdir=""):
+    nBins = 50
+    xmin = rooVar.getMin()
+    xmax = rooVar.getMax()
+
+    frame = rooVar.frame(nBins)
+
+    leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 4, 0.9, 0.89, textSize=0.04)
+    leg.SetHeader("2018 SR: background MET components")
+    CMS.SetLumi("")
+
+    peak_hist = peaking_dataset.createHistogram("histo_peak_" + plotname, rooVar, ROOT.RooFit.Binning(nBins, xmin, xmax))
+    nonpeak_hist = nonpeak_dataset.createHistogram("histo_nonpeak_" + plotname, rooVar, ROOT.RooFit.Binning(nBins, xmin, xmax))
+    y_min = 0
+    y_max = 1.8 * max(peak_hist.GetMaximum(), nonpeak_hist.GetMaximum())
+    if doLog:
+        y_min = 1e-10
+        y_max = y_max * 1000
+
+    canv = CMS.cmsDiCanvas("canv_" + plotname, x_min=xmin, x_max=xmax, y_min=y_min, y_max=y_max,
+                           r_min=0, r_max=2,
+                           nameXaxis="MET / GeV",
+                           nameYaxis="Shape (A.U.)",
+                           nameRatio="MC/Pred",
+                           square=CMS.kSquare, iPos=0)
+    canv.SetRightMargin(0.05)
+    CMS.UpdatePad(canv)
+
+    canv.cd(1)
+    if doLog:
+        ROOT.gPad.SetLogy()
+    CMS.UpdatePad(canv)
+
+    peaking_dataset.plotOn(frame, ROOT.RooFit.Name("peaking_data_" + plotname),
+                           ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#5790fc")),
+                           ROOT.RooFit.LineWidth(2),
+                           ROOT.RooFit.MarkerColor(ROOT.TColor.GetColor("#5790fc")),
+                           ROOT.RooFit.MarkerSize(1),
+                           ROOT.RooFit.Binning(nBins))
+    leg.AddEntry(frame.findObject("peaking_data_" + plotname), "Peaking-in-m(ll) background")
+
+    nonpeak_dataset.plotOn(frame, ROOT.RooFit.Name("nonpeak_data_" + plotname),
+                           ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#964a8b")),
+                           ROOT.RooFit.LineWidth(2),
+                           ROOT.RooFit.MarkerColor(ROOT.TColor.GetColor("#964a8b")),
+                           ROOT.RooFit.MarkerSize(1),
+                           ROOT.RooFit.Binning(nBins))
+    leg.AddEntry(frame.findObject("nonpeak_data_" + plotname), "Non-peaking-in-m(ll) background")
+
+    peaking_pdf.plotOn(frame, ROOT.RooFit.Name("peaking_pdf_" + plotname),
+                       ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#f89c20")),
+                       ROOT.RooFit.LineWidth(2),
+                       ROOT.RooFit.LineStyle(1),
+                       ROOT.RooFit.MarkerSize(0),
+                       ROOT.RooFit.Normalization(peaking_dataset.sumEntries(), ROOT.RooAbsReal.NumEvent),
+                       ROOT.RooFit.Binning(nBins))
+    leg.AddEntry(frame.findObject("peaking_pdf_" + plotname), "Peaking Gumbel fit")
+
+    nonpeak_pdf.plotOn(frame, ROOT.RooFit.Name("nonpeak_pdf_" + plotname),
+                       ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#e42536")),
+                       ROOT.RooFit.LineWidth(2),
+                       ROOT.RooFit.LineStyle(1),
+                       ROOT.RooFit.MarkerSize(0),
+                       ROOT.RooFit.Normalization(nonpeak_dataset.sumEntries(), ROOT.RooAbsReal.NumEvent),
+                       ROOT.RooFit.Binning(nBins))
+    leg.AddEntry(frame.findObject("nonpeak_pdf_" + plotname), "Non-peaking Gumbel fit")
+
+    frame.Draw("SAME")
+
+    canv.cd(1)
+    CMS.cmsObjectDraw(leg)
+    CMS.UpdatePad(canv)
+
+    fname = plotname + ("-log" if doLog else "")
+    canv.SaveAs(f"{fname}.pdf")
+    canv.SaveAs(f"{fname}.png")
+    if outdir:
+        os.system(f"mv {fname}.* {outdir}")
+
+    del canv
+    del leg
+
+
+def plotMETPDFsOnly(rooVar, peaking_pdf, nonpeak_pdf, plotname, outdir=""):
+    nBins = 50
+    xmin = rooVar.getMin()
+    xmax = rooVar.getMax()
+
+    frame = rooVar.frame(nBins)
+
+    leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 2, 0.9, 0.89, textSize=0.04)
+    leg.SetHeader("2018 SR: background MET components")
+    CMS.SetLumi("")
+
+    peak_pdf_hist = peaking_pdf.createHistogram("hpdf_peak_" + plotname, rooVar, ROOT.RooFit.Binning(nBins))
+    nonpeak_pdf_hist = nonpeak_pdf.createHistogram("hpdf_nonpeak_" + plotname, rooVar, ROOT.RooFit.Binning(nBins))
+    y_min = 0
+    y_max = 1.8 * max(peak_pdf_hist.GetMaximum(), nonpeak_pdf_hist.GetMaximum())
+    if doLog:
+        y_min = 1e-10
+        y_max = y_max * 1000
+
+    canv = CMS.cmsDiCanvas("canv_" + plotname, x_min=xmin, x_max=xmax, y_min=y_min, y_max=y_max,
+                           r_min=0, r_max=2,
+                           nameXaxis="MET / GeV",
+                           nameYaxis="Shape (A.U.)",
+                           nameRatio="MC/Pred",
+                           square=CMS.kSquare, iPos=0)
+    canv.SetRightMargin(0.05)
+    CMS.UpdatePad(canv)
+
+    canv.cd(1)
+    if doLog:
+        ROOT.gPad.SetLogy()
+    CMS.UpdatePad(canv)
+
+    peaking_pdf.plotOn(frame, ROOT.RooFit.Name("peaking_pdf_" + plotname),
+                       ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#f89c20")),
+                       ROOT.RooFit.LineWidth(2),
+                       ROOT.RooFit.LineStyle(1),
+                       ROOT.RooFit.MarkerSize(0),
+                       ROOT.RooFit.Normalization(1.0, ROOT.RooAbsReal.NumEvent),
+                       ROOT.RooFit.Binning(nBins))
+    leg.AddEntry(frame.findObject("peaking_pdf_" + plotname), "Peaking Gumbel fit")
+
+    nonpeak_pdf.plotOn(frame, ROOT.RooFit.Name("nonpeak_pdf_" + plotname),
+                       ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#e42536")),
+                       ROOT.RooFit.LineWidth(2),
+                       ROOT.RooFit.LineStyle(1),
+                       ROOT.RooFit.MarkerSize(0),
+                       ROOT.RooFit.Normalization(1.0, ROOT.RooAbsReal.NumEvent),
+                       ROOT.RooFit.Binning(nBins))
+    leg.AddEntry(frame.findObject("nonpeak_pdf_" + plotname), "Non-peaking Gumbel fit")
+
+    frame.Draw("SAME")
 
     canv.cd(1)
     CMS.cmsObjectDraw(leg)
@@ -169,6 +321,15 @@ plotMETFit(met, bkg_total_dataset, bkg_total_met_pdf,
            "Total background",
            f"Gumbel fit (#mu={mu_total_met.getVal():.1f}#pm{mu_total_met.getError():.1f}, b={b_total_met.getVal():.1f}#pm{b_total_met.getError():.1f})",
            "bkg_total_met_gumbel")
+plotMETPDFTogether(met,
+                   bkg_peaking_dataset, bkg_nonpeak_dataset,
+                   bkg_peaking_met_pdf, bkg_nonpeak_met_pdf,
+                   "bkg_met_components_gumbel")
+plotMETPDFsOnly(met,
+                bkg_peaking_met_pdf, bkg_nonpeak_met_pdf,
+                "bkg_met_pdfs_only_gumbel")
+
+
 
 os.system("mv *.png /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/background_shapes")
 os.system("mv *.pdf /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/background_shapes")
