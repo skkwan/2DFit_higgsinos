@@ -1,9 +1,102 @@
 # Run in ROOT 6.38 (do not do cmsenv)
 
+import os
 import ROOT
 from ROOT import RooFit as RF
 import numpy as np
 from array import array
+import cmsstyle as CMS
+
+doLog = True
+
+
+def plotSignalFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname, nFloatParams=2, outdir="", getOverflow=True, doLog=True):
+    nBins = 50
+    xmin = rooVar.getMin()
+    xmax = rooVar.getMax()
+
+    scale_suffix = "_log" if doLog else "_lin"
+    frame = rooVar.frame(nBins)
+
+    leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 4, 0.9, 0.89, textSize=0.04)
+    CMS.SetLumi("")
+
+    data_hist = dataset.createHistogram("histo_" + plotname + scale_suffix, rooVar, ROOT.RooFit.Binning(nBins, xmin, xmax))
+    if getOverflow:
+        data_hist.SetBinContent(data_hist.GetNbinsX(), data_hist.GetBinContent(data_hist.GetNbinsX()) + data_hist.GetBinContent(data_hist.GetNbinsX() + 1))
+    pdf_hist = pdf.createHistogram("hpdf_" + plotname + scale_suffix, rooVar, ROOT.RooFit.Binning(nBins))
+    if getOverflow:
+        pdf_hist.SetBinContent(pdf_hist.GetNbinsX(), pdf_hist.GetBinContent(pdf_hist.GetNbinsX()) + pdf_hist.GetBinContent(pdf_hist.GetNbinsX() + 1))
+    y_min = 0
+    y_max = 1.8 * max(data_hist.GetMaximum(), pdf_hist.GetMaximum())
+    if doLog:
+        y_min = 1e-10
+        y_max = y_max * 1000
+
+    canv = CMS.cmsDiCanvas("canv_" + plotname + scale_suffix, x_min=xmin, x_max=xmax, y_min=y_min, y_max=y_max,
+                           r_min=0, r_max=2,
+                           nameXaxis=f"{name} / GeV",
+                           nameYaxis="Shape (A.U.)",
+                           nameRatio="MC/Pred",
+                           square=CMS.kSquare, iPos=0)
+    canv.SetRightMargin(0.05)
+    CMS.UpdatePad(canv)
+
+    canv.cd(1)
+    if doLog:
+        ROOT.gPad.SetLogy()
+    CMS.UpdatePad(canv)
+
+    dataset.plotOn(frame, ROOT.RooFit.Name("data_" + plotname),
+                   ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#5790fc")),
+                   ROOT.RooFit.LineWidth(2),
+                   ROOT.RooFit.MarkerColor(ROOT.TColor.GetColor("#5790fc")),
+                   ROOT.RooFit.MarkerSize(1),
+                   ROOT.RooFit.Binning(nBins))
+    leg.AddEntry(frame.findObject("data_" + plotname), dataLabel)
+
+    pdf.plotOn(frame, ROOT.RooFit.Name("pdf_" + plotname),
+               ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#f89c20")),
+               ROOT.RooFit.LineWidth(2),
+               ROOT.RooFit.LineStyle(1),
+               ROOT.RooFit.MarkerSize(0),
+               ROOT.RooFit.Binning(nBins))
+    leg.AddEntry(frame.findObject("pdf_" + plotname), fitLabel)
+
+    roo_curve = frame.getCurve("pdf_" + plotname)
+    chi2_per_ndf = frame.chiSquare("pdf_" + plotname, "data_" + plotname, nFloatParams)
+    leg.SetHeader(f"2018 SR: (650, 1) GeV signal (#chi^{{2}}/ndf = {chi2_per_ndf:.2f})")
+    frame.Draw("SAME")
+
+    # Ratio plot
+    canv.cd(2)
+    data_ratio = data_hist.Clone()
+    prediction = data_hist.Clone()
+    for i in range(1, data_ratio.GetNbinsX() + 1):
+        thisXval = data_ratio.GetBinCenter(i)
+        pdfY = roo_curve.Eval(thisXval)
+        prediction.SetBinContent(i, pdfY)
+    data_ratio.Divide(prediction)
+    data_ratio.SetMarkerColor(ROOT.kBlack)
+    data_ratio.SetLineColor(ROOT.kBlack)
+    CMS.cmsObjectDraw(data_ratio, "E", MarkerStyle=ROOT.kFullCircle)
+    unitLine = ROOT.TLine(xmin, 1.0, xmax, 1.0)
+    unitLine.SetLineColor(ROOT.kBlack)
+    unitLine.SetLineWidth(1)
+    unitLine.Draw("SAME")
+
+    canv.cd(1)
+    CMS.cmsObjectDraw(leg)
+    CMS.UpdatePad(canv)
+
+    fname = plotname + ("-log" if doLog else "")
+    canv.SaveAs(f"{fname}.pdf")
+    canv.SaveAs(f"{fname}.png")
+    if outdir:
+        os.system(f"mv {fname}.* {outdir}")
+
+    del canv
+    del leg
 
 ##################################################
 # Helper functions for spline (used for the signal MET)
@@ -90,7 +183,7 @@ def make_knot_x(
 ##### Define fit observables 
 ##################################################
 mll = ROOT.RooRealVar("m_ll", "m_ll", 60, 120)
-met = ROOT.RooRealVar("met", "met", 0, 1200)
+met = ROOT.RooRealVar("met", "met", 200, 1200)
 
 ##################################################
 ###### Retrieve signal dataset (prepared with reformat.py)
@@ -116,7 +209,7 @@ bkgdataset = ROOT.RooDataSet("bkgdataset", "bkgdataset", variables, ROOT.RooFit.
 # Declare the signal 1D PDFs and multiply them into 2D PDFs
 ###########################################################################
 # Get TH1 of signal met: https://github.com/guitargeek/hasco-2023-root/blob/main/notebooks/roofit-tutorial-01.ipynb 
-sig_met_hist = ROOT.TH1D("sig_met_hist", "sig_met_hist", 40, 0, 1200)
+sig_met_hist = ROOT.TH1D("sig_met_hist", "sig_met_hist", 50, 200, 1200)
 sigtree.Draw("met >> sig_met_hist")
 # Convert TH1 into RooDataHist
 sig_roo_template_hist = ROOT.RooDataHist("sig_roo_template_hist", "sig_roo_template_hist", met, sig_met_hist)
@@ -214,60 +307,30 @@ params = sigtot_mll_met_2dpdf.getParameters(sigdataset)
 print(params.Print("v"))
 
 
-###########################################################################
-# Declare the background 1D PDFs and multiply them into 2D PDFs
-###########################################################################
-# Background fake mll component in MET dimension
-mu_fakemll_met = ROOT.RooRealVar('mu_fakemll_met', 'mu_fakemll_met', 225, 100, 300)
-b_fakemll_met = ROOT.RooRealVar('b_fakemll_met', 'b_fakemll_met', 40, 5, 50)
-bkgfakemll_met = ROOT.RooGenericPdf("bkgfakemll_met", "bkgfakemll_met", "1/b_fakemll_met * exp(-(@0 - mu_fakemll_met)/b_fakemll_met - exp(-(@0 - mu_fakemll_met)/b_fakemll_met))",
-                        ROOT.RooArgList(met, mu_fakemll_met, b_fakemll_met))
-# Background fake mll component in mll dimensio
-a_fakemll_mll = ROOT.RooRealVar("a_fakemll_mll", "a_fakemll_mll", -0.03, -1, 1)
-bkgfakemll_mll = ROOT.RooExponential("bkgfakemll_mll", "bkgfakemll_mll", mll, a_fakemll_mll)
-#Background 2d fakemll model: bkgfakemll_mll_met_2dpdf = bkgfakemll_met * bkgfakemll_mll
-bkgfakemll_mll_met_2dpdf = ROOT.RooProdPdf("bkgfakemll_mll_met_2dpdf", "bkgfakemll_mll_met_2dpdf", [bkgfakemll_mll, bkgfakemll_met])
-
-
-# Background real mll component in MET dimension
-mu_realmll_met = ROOT.RooRealVar('mu_realmll_met', 'mu_realmll_met', 50, 30, 400)   # adequate value somewhere around 246 based on hand-drawn plots
-b_realmll_met = ROOT.RooRealVar('b_realmll_met', 'b_realmll_met', 40, 20, 100)    # adequate value somewhere around 41 based on hand-drawn plots
-bkgrealmll_met = ROOT.RooGenericPdf("bkgrealmll_met", "bkgrealmll_met", "1/b_realmll_met * exp(-(@0 - mu_realmll_met)/b_realmll_met - exp(-(@0 - mu_realmll_met)/b_realmll_met))",
-                        ROOT.RooArgList(met, mu_realmll_met, b_realmll_met))
-# Background real mll component in mll dimension (parameters taken from initial fit)
-zpeak_file = ROOT.TFile.Open("../zpeak_fit/initial_zPeak_fit_result.root", "READ")
-zpeak_result = zpeak_file.Get("zPeak_CRZ_fit_result")
-zpeak_mean_mll = zpeak_result.floatParsFinal().find("peak_mean_mll")
-zpeak_sigmal_mll = zpeak_result.floatParsFinal().find("peak_sigmal_mll")
-zpeak_sigmar_mll = zpeak_result.floatParsFinal().find("peak_sigmar_mll")
-zpeak_alphal_mll = zpeak_result.floatParsFinal().find("peak_alphal_mll")
-zpeak_nl_mll = zpeak_result.floatParsFinal().find("peak_nl_mll")
-zpeak_alphar_mll = zpeak_result.floatParsFinal().find("peak_alphar_mll")
-zpeak_nr_mll = zpeak_result.floatParsFinal().find("peak_nr_mll")
-for v in [zpeak_mean_mll, zpeak_sigmal_mll, zpeak_sigmar_mll, zpeak_alphal_mll, zpeak_nl_mll, zpeak_alphar_mll, zpeak_nr_mll]:
-    v.setConstant()
-bkgrealmll_mll = ROOT.RooCrystalBall("bkgrealmll_mll", "bkgrealmll_mll", mll, zpeak_mean_mll, zpeak_sigmal_mll, zpeak_sigmar_mll, zpeak_alphal_mll, zpeak_nl_mll, zpeak_alphar_mll, zpeak_nr_mll)
-
-# Background real mll component: 2D PDF (product)
-bkgrealmll_mll_met_2dpdf = ROOT.RooProdPdf("bkgrealmll_mll_met_2dpdf", "bkgrealmll_mll_met_2dpdf", [bkgrealmll_mll, bkgrealmll_met])
-
-# Overall 2D bkg model: bkgtot_mll_met_2dpdf = ratio * bkgrealmll_mll_met_2dpdf + (1 - ratio) bkgfakemll_mll_met_2dpdf
-ratio_realmll = ROOT.RooRealVar("ratio_realmll", "ratio_realmll", 0.1, 0, 1)
-bkgtot_mll_met_2dpdf = ROOT.RooAddPdf("bkgtot_mll_met_2dpdf", "bkgtot_mll_met_2dpdf", [bkgrealmll_mll_met_2dpdf, bkgfakemll_mll_met_2dpdf], [ratio_realmll])
-
-# Then fit met projection with ratio_realmll fixed
-bkg_result = bkgtot_mll_met_2dpdf.fitTo(bkgdataset, RF.Save(), RF.SumW2Error(True))
-params_bkg = bkgtot_mll_met_2dpdf.getParameters(bkgdataset)
-print(params_bkg.Print("v"))
-
 w = ROOT.RooWorkspace("workspace", "workspace")
 w.Import(sig_roohistpdf_met)
 w.Import(pdf_of_spline)
 # w.Import(spline)
 
-f = ROOT.TFile("fitresult.root", "RECREATE")
+f = ROOT.TFile("fitresult_signal.root", "RECREATE")
 sig_result.Write("sig_result")
-bkg_result.Write("bkg_result")
-zpeak_result.Write("zpeak_result")
+# bkg_result.Write("bkg_result")
+# zpeak_result.Write("zpeak_result")
 w.Write()
 f.Close()
+
+for doLog in [True, False]:
+    plotSignalFit("MET", met, sigdataset, pdf_of_spline,
+                  "Signal MC",
+                  "Spline fit",
+                  "sig_met_spline",
+                  doLog=doLog)
+    plotSignalFit("m(ll)", mll, sigdataset, sig_dcb_mll,
+                  "Signal MC",
+                  f"DCB fit (#mu={mean_mll.getVal():.1f}#pm{mean_mll.getError():.1f}, #sigma_L={sigmal_mll.getVal():.1f}#pm{sigmal_mll.getError():.1f})",
+                  "sig_mll_dcb",
+                  nFloatParams=7,
+                  doLog=doLog)
+
+os.system("mv sig*.pdf /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/signal_shapes")
+os.system("mv sig*.png /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/signal_shapes")

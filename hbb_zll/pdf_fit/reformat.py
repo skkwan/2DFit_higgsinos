@@ -58,6 +58,9 @@ samples = {
         ]
 }
 
+peaking_samples = ["DYJets", "TTZ_peak"]
+
+
 samples_signal = {
     "snapshot_TChiZH_650_1_SR_mll_MET_fit_scheme": [
         "/eos/cms/store/group/phys_susy/skkwan/condorHistogramming/2026-02-25-00h42m-2018-dataMC-with-SR-ntuples/TChiZH_650_1/snapshot_TChiZH_650_1_cat_0_batch_0_channel_mm_SR_mll_MET_fit_scheme.root",
@@ -81,14 +84,92 @@ def count_yield(class_list):
                 total += ROOT.RDataFrame(tree_name, ee_files).Sum("weight_nominal_ee").GetValue()
     return total
 
-peaking_yield = count_yield(["DYJets", "TTZ_peak"])
-nonpeaking_yield = count_yield(["WJets", "ttbar", "TTZ_nonpeak", "TTW", "WH", "ZH", "WZ", "WW", "ZZ"])
-frac = (peaking_yield)/(peaking_yield + nonpeaking_yield)
-print(f"Counted {peaking_yield} events (weighted) in peaking background and {nonpeaking_yield} (weighted) in non-peaking background. So the peaking background is {frac} of the total background")
-bkg_list_mm = []
-bkg_list_ee = []
+# peaking_yield = count_yield(["DYJets", "TTZ_peak"])
+# nonpeaking_yield = count_yield(["WJets", "ttbar", "TTZ_nonpeak", "TTW", "WH", "ZH", "WZ", "WW", "ZZ"])
+# frac = (peaking_yield)/(peaking_yield + nonpeaking_yield)
+# print(f"Counted {peaking_yield} events (weighted) in peaking background and {nonpeaking_yield} (weighted) in non-peaking background. So the peaking background is {frac} of the total background")
 
 
+#### BACKGROUND: SEPARATE PEAKING AND NON-PEAKING
+bkg_list_peaking_mm = []
+bkg_list_peaking_ee = []
+bkg_list_nonpeak_mm = []
+bkg_list_nonpeak_ee = []
+
+for group in samples:
+    for s in samples[group]:
+        if group in peaking_samples:
+            print("Peaking: ", group, s)
+            for ntuple in glob.glob(f"{basedir}/{s}/snapshot*mm_SR_mll_MET_fit_scheme.root"):
+                bkg_list_peaking_mm.append(ntuple)
+            for ntuple in glob.glob(f"{basedir}/{s}/snapshot*ee_SR_mll_MET_fit_scheme.root"):
+                bkg_list_peaking_ee.append(ntuple)
+        else:
+            print("Non-peaking: ", group, s)
+            for ntuple in glob.glob(f"{basedir}/{s}/snapshot*mm_SR_mll_MET_fit_scheme.root"):
+                bkg_list_nonpeak_mm.append(ntuple)
+            for ntuple in glob.glob(f"{basedir}/{s}/snapshot*ee_SR_mll_MET_fit_scheme.root"):
+                bkg_list_nonpeak_ee.append(ntuple)
+
+# Hadd mm channel PEAKING
+hadd_mm = f"hadd -f -j -k {basedir}/backgrounds_peaking_mm.root"
+for b in bkg_list_peaking_mm:
+    hadd_mm += f" {b}"
+print(hadd_mm)
+os.system(hadd_mm)
+
+# Hadd ee channel PEAKING
+hadd_ee = f"hadd -f -j -k {basedir}/backgrounds_peaking_ee.root"
+for b in bkg_list_peaking_ee:
+    hadd_ee += f" {b}"
+print(hadd_ee)
+os.system(hadd_ee)
+
+# Hadd mm channel NON-PEAKING
+hadd_mm = f"hadd -f -j -k {basedir}/backgrounds_nonpeak_mm.root"
+for b in bkg_list_nonpeak_mm:
+    hadd_mm += f" {b}"
+print(hadd_mm)
+os.system(hadd_mm)
+
+# Hadd ee channel NON-PEAKING
+hadd_ee = f"hadd -f -j -k {basedir}/backgrounds_nonpeak_ee.root"
+for b in bkg_list_nonpeak_ee:
+    hadd_ee += f" {b}"
+print(hadd_ee)
+os.system(hadd_ee)
+
+# Harmonize weight branch name
+rdf_mm_peaking = ROOT.RDataFrame(tree_name, f"{basedir}/backgrounds_peaking_mm.root")
+rdf_mm_peaking.Define("weight_nominal", "weight_nominal_mm") \
+              .Snapshot(tree_name, f"{basedir}/backgrounds_peaking_mm_fixed.root")
+
+rdf_ee = ROOT.RDataFrame(tree_name, f"{basedir}/backgrounds_peaking_ee.root")
+rdf_ee.Define("weight_nominal", "weight_nominal_ee") \
+      .Snapshot(tree_name, f"{basedir}/backgrounds_peaking_ee_fixed.root")
+
+hadd_combined = f"hadd -f -j -k backgrounds_peaking.root {basedir}/backgrounds_peaking_mm_fixed.root {basedir}/backgrounds_peaking_ee_fixed.root"
+print(hadd_combined)
+os.system(hadd_combined)
+
+# Harmonize weight branch name
+rdf_mm_nonpeak = ROOT.RDataFrame(tree_name, f"{basedir}/backgrounds_nonpeak_mm.root")
+rdf_mm_nonpeak.Define("weight_nominal", "weight_nominal_mm") \
+              .Snapshot(tree_name, f"{basedir}/backgrounds_nonpeak_mm_fixed.root")
+
+rdf_ee = ROOT.RDataFrame(tree_name, f"{basedir}/backgrounds_nonpeak_ee.root")
+rdf_ee.Define("weight_nominal", "weight_nominal_ee") \
+      .Snapshot(tree_name, f"{basedir}/backgrounds_nonpeak_ee_fixed.root")
+
+hadd_combined = f"hadd -f -j -k backgrounds_nonpeak.root {basedir}/backgrounds_nonpeak_mm_fixed.root {basedir}/backgrounds_nonpeak_ee_fixed.root"
+print(hadd_combined)
+os.system(hadd_combined)
+
+
+
+# ### BACKGROUND: TOTAL
+# bkg_list_mm = []
+# bkg_list_ee = []
 # for group in samples:
 #     if "data" in group:
 #         continue
@@ -99,7 +180,6 @@ bkg_list_ee = []
 #             print(ntuple)
 #         for ntuple in glob.glob(f"{basedir}/{s}/snapshot*ee_SR_mll_MET_fit_scheme.root"):
 #             bkg_list_ee.append(ntuple)
-
 
 # # Hadd mm channel
 # hadd_mm = f"hadd -f -j -k {basedir}/backgrounds_mm.root"
