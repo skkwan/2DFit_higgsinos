@@ -7,10 +7,10 @@ import numpy as np
 from array import array
 import cmsstyle as CMS
 
-doLog = True
-
-
 def plotSignalFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname, nFloatParams=2, outdir="", getOverflow=True, doLog=True):
+    """
+    Helper function for plotting
+    """
     nBins = 50
     xmin = rooVar.getMin()
     xmax = rooVar.getMax()
@@ -100,8 +100,8 @@ def plotSignalFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname, nFl
 
 ##################################################
 # Helper functions for spline (used for the signal MET)
+# ** "prune_knots_in_tiny_tail" is currently NOT called, but taken from https://gitlab.cern.ch/cms-l1-ad/coffea-dask-axol1tl-studies/-/blob/master/prepareDatacards.py?ref_type=heads
 ##################################################
-# From https://gitlab.cern.ch/cms-l1-ad/coffea-dask-axol1tl-studies/-/blob/master/prepareDatacards.py?ref_type=heads
 def prune_knots_in_tiny_tail(knot_x, knot_y, tail_thresh=1e-8, min_keep=10):
     """
     Reduce knot density in the very low-yield tail without truncating the domain.
@@ -127,7 +127,7 @@ def prune_knots_in_tiny_tail(knot_x, knot_y, tail_thresh=1e-8, min_keep=10):
         cum += w[i]
         remaining = total - cum
         # keep adding knots until remaining tail is tiny,
-        # then stop keeping every knot (we'll keep last one).
+        # then stop keeping every knot (we'll keep the last one)
         keep.append(i)
         if remaining / total < tail_thresh and len(keep) >= min_keep:
             break
@@ -145,6 +145,10 @@ def make_knot_x(
         min_dx_bins=2,        # enforce some minimum spacing in bin units
         centers=None,         # pass bin centers for snapping / spacing checks
     ):
+    """
+    Construct and return knots for a range of values (x_min, x_max). "Power" determines the spacing of the bins. Default value is 1.0 (linear).
+    If "centers" is provided, snap the knots to the nearest bin.
+    """
         n_knots = int(max(2, n_knots))
         x_min = float(x_min)
         x_max = float(x_max)
@@ -256,10 +260,9 @@ knot_y = np.array(knot_y, dtype=np.double)
 
 # knot_x, knot_y = prune_knots_in_tiny_tail(knot_x, knot_y, tail_thresh=tail_thresh)
 # knot_y_use = np.maximum(knot_y, min_y).astype(np.double)
+
 vx = ROOT.std.vector('double')(knot_x)
 vy_use = ROOT.std.vector('double')(knot_y)
-
-print("Zipped:", list(zip(vx, vy_use)))
 
 spline = ROOT.RooSpline(
         "spline", "spline",
@@ -269,23 +272,11 @@ spline = ROOT.RooSpline(
         order=3,
     )
 
-# pdf_of_spline = ROOT.RooGenericPdf(
-#     "pdf_of_spline", "pdf_of_spline",
-#     "max(@0, 1e-12)",    # prevent the interpolation from going 0 or negative
-#     ROOT.RooArgList(spline)
-# )
-
-# Step clamp: PDF is exactly 1e-12 below the first knot, preventing wild extrapolation
 pdf_of_spline = ROOT.RooGenericPdf(
     "pdf_of_spline", "pdf_of_spline",
     f"(@1 < {first_knot_x}) ? 1e-12 : max(@0, 1e-12)",
     ROOT.RooArgList(spline, met)
 )
-
-
-# # Also keep a RooHistPdf for reference
-# sig_roo_template_hist = ROOT.RooDataHist("sig_roo_template_hist", "sig_roo_template_hist", ROOT.RooArgSet(met), sig_met_hist)
-# sig_roohistpdf_met = ROOT.RooHistPdf("sig_roohistpdf_met", "sig_roohistpdf_met", ROOT.RooArgSet(met), sig_roo_template_hist, intOrder=0)
 
 # Signal 1d mll model
 mean_mll = ROOT.RooRealVar("mean_mll", "mean_mll", 90, 85, 95)
@@ -310,12 +301,9 @@ print(params.Print("v"))
 w = ROOT.RooWorkspace("workspace", "workspace")
 w.Import(sig_roohistpdf_met)
 w.Import(pdf_of_spline)
-# w.Import(spline)
 
 f = ROOT.TFile("fitresult_signal.root", "RECREATE")
 sig_result.Write("sig_result")
-# bkg_result.Write("bkg_result")
-# zpeak_result.Write("zpeak_result")
 w.Write()
 f.Close()
 
