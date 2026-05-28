@@ -7,17 +7,15 @@ import numpy as np
 from array import array
 import cmsstyle as CMS
 
-doLog = True
-
 # From Claude and modified
-def plotFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname, nFloatParams=2, outdir="", getOverflow=True):
+def plotFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname, nFloatParams=2, outdir="", getOverflow=True, doLog=False):
     nBins = 50
     xmin = rooVar.getMin()
     xmax = rooVar.getMax()
 
     frame = rooVar.frame(nBins)
 
-    leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 4, 0.9, 0.89, textSize=0.04)
+    leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 4, 0.95, 0.89, textSize=0.04)
     CMS.SetLumi("")
 
     data_hist = dataset.createHistogram("histo_" + plotname, rooVar, ROOT.RooFit.Binning(nBins, xmin, xmax))
@@ -64,7 +62,7 @@ def plotFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname, nFloatPar
 
     roo_curve = frame.getCurve("pdf_" + plotname)
     chi2_per_ndf = frame.chiSquare("pdf_" + plotname, "data_" + plotname, nFloatParams)
-    leg.SetHeader(f"2018 SR: background MET (#chi^{{2}}/ndf = {chi2_per_ndf:.2f})")
+    leg.SetHeader(f"2018 SR: background MET ( #chi^{{2}}/ndf = {chi2_per_ndf:.2f})")
     frame.Draw("SAME")
 
     # Ratio plot
@@ -99,7 +97,7 @@ def plotFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname, nFloatPar
 
 
 def plotMETPDFTogether(rooVar, peaking_dataset, nonpeak_dataset,
-                       peaking_pdf, nonpeak_pdf, plotname, outdir="", getOverflow=True):
+                       peaking_pdf, nonpeak_pdf, plotname, outdir="", getOverflow=True, doLog=False):
     nBins = 50
     xmin = rooVar.getMin()
     xmax = rooVar.getMax()
@@ -191,7 +189,7 @@ def plotMETPDFTogether(rooVar, peaking_dataset, nonpeak_dataset,
     del leg
 
 
-def plotMETPDFsOnly(rooVar, peaking_pdf, nonpeak_pdf, plotname, outdir="", getOverflow=True):
+def plotMETPDFsOnly(rooVar, peaking_pdf, nonpeak_pdf, plotname, outdir="", getOverflow=True, doLog=False):
     nBins = 50
     xmin = rooVar.getMin()
     xmax = rooVar.getMax()
@@ -318,6 +316,10 @@ bkg_peaking_params_met = bkgpeaking_met.getParameters(bkg_peaking_dataset_met)
 
 
 f = ROOT.TFile("fitresult_background_all_except_ZPeak.root", "RECREATE")
+bkg_nonpeak_result_met.Write("bkg_nonpeak_result_met")
+bkg_nonpeak_result_mll.Write("bkg_nonpeak_result_mll")
+bkg_peaking_result_met.Write("bkg_peaking_result_met")
+
 bkg_nonpeak_params_met.Write("bkg_nonpeak_params_met")
 bkg_nonpeak_params_mll.Write("bkg_nonpeak_params_mll")
 bkg_peaking_params_met.Write("bkg_peaking_params_met")
@@ -325,18 +327,19 @@ bkg_peaking_params_met.Write("bkg_peaking_params_met")
 f.Close()
 
 
-plotFit("MET", met, bkg_nonpeak_dataset_met, bkgnonpeak_met,
-           "Non-peaking-in-m(ll) background",
-           f"Gumbel fit (#mu={mu_nonpeak_met.getVal():.1f}#pm{mu_nonpeak_met.getError():.1f}, b={b_nonpeak_met.getVal():.1f}#pm{b_nonpeak_met.getError():.1f})",
-           "bkg_nonpeak_met_gumbel")
-plotFit("MET", met, bkg_peaking_dataset_met, bkgpeaking_met,
-           "Peaking-in-m(ll) background",
-           f"Gumbel fit (#mu={mu_peaking_met.getVal():.1f}#pm{mu_peaking_met.getError():.1f}, b={b_peaking_met.getVal():.1f}#pm{b_peaking_met.getError():.1f})",
-           "bkg_peaking_met_gumbel")
-plotFit("m(ll)", mll, bkg_nonpeak_dataset_mll, bkgnonpeak_mll,
-           "Non-peaking-in-m(ll) background", 
-           f"Exponential fit (a={a_nonpeak_mll.getVal():.1f}#pm{a_nonpeak_mll.getError():.1f})",
-           "bkg_nonpeak_mll_exponential")
+for doLog in [True, False]:
+    plotFit("MET", met, bkg_nonpeak_dataset_met, bkgnonpeak_met,
+               "Non-peaking-in-m(ll) background",
+               f"Gumbel fit (#mu={mu_nonpeak_met.getVal():.1f} #pm {mu_nonpeak_met.getError():.1f}, b={b_nonpeak_met.getVal():.1f}#pm{b_nonpeak_met.getError():.1f})",
+               "bkg_nonpeak_met_gumbel", doLog=doLog)
+    plotFit("MET", met, bkg_peaking_dataset_met, bkgpeaking_met,
+               "Peaking-in-m(ll) background",
+               f"Gumbel fit (#mu={mu_peaking_met.getVal():.1f} #pm {mu_peaking_met.getError():.1f}, b={b_peaking_met.getVal():.1f}#pm{b_peaking_met.getError():.1f})",
+               "bkg_peaking_met_gumbel", doLog=doLog)
+    plotFit("m(ll)", mll, bkg_nonpeak_dataset_mll, bkgnonpeak_mll,
+               "Non-peaking-in-m(ll) background",
+               f"Exponential fit (a={a_nonpeak_mll.getVal():.2f}  #pm {a_nonpeak_mll.getError():.2f})",
+               "bkg_nonpeak_mll_exponential", doLog=doLog)
 # plotMETPDFTogether(met,
 #                    bkg_peaking_dataset, bkg_nonpeak_dataset,
 #                    bkg_peaking_met_pdf, bkgnonpeak_met,

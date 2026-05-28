@@ -15,11 +15,16 @@ import os
 ##################################################
 # Load pre-fit results
 ##################################################
-resultsfile = ROOT.TFile.Open("../pdf_fit/fitresult.root", "READ")
-workspace    = resultsfile.Get("workspace")
-sig_results  = resultsfile.Get("sig_result")
-bkg_results  = resultsfile.Get("bkg_result")
-zpeak_results = resultsfile.Get("zpeak_result")
+signalresultsfile = ROOT.TFile.Open("../pdf_fit/fitresult_signal.root", "READ")
+bkgresultsfile = ROOT.TFile.Open("../pdf_fit/fitresult_background_all_except_ZPeak.root", "READ")
+zpeakresultsfile = ROOT.TFile.Open("../zpeak_fit/initial_zPeak_fit_result.root", "READ")
+
+workspace    = signalresultsfile.Get("workspace")
+sig_result  = signalresultsfile.Get("sig_result")
+bkg_nonpeak_result_met = bkgresultsfile.Get("bkg_nonpeak_result_met")
+bkg_nonpeak_result_mll = bkgresultsfile.Get("bkg_nonpeak_result_mll")
+bkg_peaking_result_met = bkgresultsfile.Get("bkg_peaking_result_met")
+zpeak_result = zpeakresultsfile.Get("zPeak_CRZ_fit_result")
 
 ##################################################
 # Observables
@@ -33,13 +38,13 @@ mll = ROOT.RooRealVar("m_ll", "m_ll", 60, 120)
 # Signal 2D PDF  (fixed shape)
 # sigtot_mll_met_2dpdf = sig_dcb_mll (mll) x pdf_of_spline (MET)
 ##################################################
-mean_mll   = sig_results.floatParsFinal().find("mean_mll")
-sigmal_mll = sig_results.floatParsFinal().find("sigmal_mll")
-sigmar_mll = sig_results.floatParsFinal().find("sigmar_mll")
-alphal_mll = sig_results.floatParsFinal().find("alphal_mll")
-alphar_mll = sig_results.floatParsFinal().find("alphar_mll")
-nl_mll     = sig_results.floatParsFinal().find("nl_mll")
-nr_mll     = sig_results.floatParsFinal().find("nr_mll")
+mean_mll   = sig_result.floatParsFinal().find("mean_mll")
+sigmal_mll = sig_result.floatParsFinal().find("sigmal_mll")
+sigmar_mll = sig_result.floatParsFinal().find("sigmar_mll")
+alphal_mll = sig_result.floatParsFinal().find("alphal_mll")
+alphar_mll = sig_result.floatParsFinal().find("alphar_mll")
+nl_mll     = sig_result.floatParsFinal().find("nl_mll")
+nr_mll     = sig_result.floatParsFinal().find("nr_mll")
 for v in [mean_mll, sigmal_mll, sigmar_mll, alphal_mll, alphar_mll, nl_mll, nr_mll]:
     v.setConstant(True)
 
@@ -55,68 +60,68 @@ sigtot_mll_met_2dpdf = ROOT.RooProdPdf("sigtot_mll_met_2dpdf", "sigtot_mll_met_2
 
 ##################################################
 # Background 2D PDF  (fixed shape)
-# bkgtot_mll_met_2dpdf = ratio_realmll * bkgrealmll_2dpdf
-#                      + (1 - ratio_realmll) * bkgfakemll_2dpdf
+# bkgtot_mll_met_2dpdf = ratio_peaking * bkgpeaking_2dpdf
+#                      + (1 - ratio_peaking) * bkgnonpeak_2dpdf
 ##################################################
 
 # --- fake-mll component ---
-mu_fakemll_met = bkg_results.floatParsFinal().find("mu_fakemll_met")
-b_fakemll_met  = bkg_results.floatParsFinal().find("b_fakemll_met")
-a_fakemll_mll  = bkg_results.floatParsFinal().find("a_fakemll_mll")
-for v in [mu_fakemll_met, b_fakemll_met, a_fakemll_mll]:
+mu_nonpeak_met = bkg_nonpeak_result_met.floatParsFinal().find("mu_nonpeak_met")
+b_nonpeak_met  = bkg_nonpeak_result_met.floatParsFinal().find("b_nonpeak_met")
+a_nonpeak_mll  = bkg_nonpeak_result_mll.floatParsFinal().find("a_nonpeak_mll")
+for v in [mu_nonpeak_met, b_nonpeak_met, a_nonpeak_mll]:
     v.setConstant(True)
 
-bkgfakemll_met = ROOT.RooGenericPdf(
-    "bkgfakemll_met", "bkgfakemll_met",
-    "1/b_fakemll_met * exp(-(@0 - mu_fakemll_met)/b_fakemll_met"
-    " - exp(-(@0 - mu_fakemll_met)/b_fakemll_met))",
-    ROOT.RooArgList(met, mu_fakemll_met, b_fakemll_met))
+bkgnonpeak_met = ROOT.RooGenericPdf(
+    "bkgnonpeak_met", "bkgnonpeak_met",
+    "1/b_nonpeak_met * exp(-(@0 - mu_nonpeak_met)/b_nonpeak_met"
+    " - exp(-(@0 - mu_nonpeak_met)/b_nonpeak_met))",
+    ROOT.RooArgList(met, mu_nonpeak_met, b_nonpeak_met))
 
-bkgfakemll_mll = ROOT.RooExponential("bkgfakemll_mll", "bkgfakemll_mll",
-                                      mll, a_fakemll_mll)
+bkgnonpeak_mll = ROOT.RooExponential("bkgnonpeak_mll", "bkgnonpeak_mll",
+                                      mll, a_nonpeak_mll)
 
-bkgfakemll_mll_met_2dpdf = ROOT.RooProdPdf("bkgfakemll_mll_met_2dpdf",
-                                             "bkgfakemll_mll_met_2dpdf",
-                                             ROOT.RooArgList(bkgfakemll_mll, bkgfakemll_met))
+bkgnonpeak_mll_met_2dpdf = ROOT.RooProdPdf("bkgnonpeak_mll_met_2dpdf",
+                                             "bkgnonpeak_mll_met_2dpdf",
+                                             ROOT.RooArgList(bkgnonpeak_mll, bkgnonpeak_met))
 
 # --- real-mll component (Z peak) ---
-mu_realmll_met = bkg_results.floatParsFinal().find("mu_realmll_met")
-b_realmll_met  = bkg_results.floatParsFinal().find("b_realmll_met")
-for v in [mu_realmll_met, b_realmll_met]:
+mu_peaking_met = bkg_peaking_result_met.floatParsFinal().find("mu_peaking_met")
+b_peaking_met  = bkg_peaking_result_met.floatParsFinal().find("b_peaking_met")
+for v in [mu_peaking_met, b_peaking_met]:
     v.setConstant(True)
 
-bkgrealmll_met = ROOT.RooGenericPdf(
-    "bkgrealmll_met", "bkgrealmll_met",
-    "1/b_realmll_met * exp(-(@0 - mu_realmll_met)/b_realmll_met"
-    " - exp(-(@0 - mu_realmll_met)/b_realmll_met))",
-    ROOT.RooArgList(met, mu_realmll_met, b_realmll_met))
+bkgpeaking_met = ROOT.RooGenericPdf(
+    "bkgpeaking_met", "bkgpeaking_met",
+    "1/b_peaking_met * exp(-(@0 - mu_peaking_met)/b_peaking_met"
+    " - exp(-(@0 - mu_peaking_met)/b_peaking_met))",
+    ROOT.RooArgList(met, mu_peaking_met, b_peaking_met))
 
-zpeak_mean_mll   = zpeak_results.floatParsFinal().find("peak_mean_mll")
-zpeak_sigmal_mll = zpeak_results.floatParsFinal().find("peak_sigmal_mll")
-zpeak_sigmar_mll = zpeak_results.floatParsFinal().find("peak_sigmar_mll")
-zpeak_alphal_mll = zpeak_results.floatParsFinal().find("peak_alphal_mll")
-zpeak_nl_mll     = zpeak_results.floatParsFinal().find("peak_nl_mll")
-zpeak_alphar_mll = zpeak_results.floatParsFinal().find("peak_alphar_mll")
-zpeak_nr_mll     = zpeak_results.floatParsFinal().find("peak_nr_mll")
+zpeak_mean_mll   = zpeak_result.floatParsFinal().find("peak_mean_mll")
+zpeak_sigmal_mll = zpeak_result.floatParsFinal().find("peak_sigmal_mll")
+zpeak_sigmar_mll = zpeak_result.floatParsFinal().find("peak_sigmar_mll")
+zpeak_alphal_mll = zpeak_result.floatParsFinal().find("peak_alphal_mll")
+zpeak_nl_mll     = zpeak_result.floatParsFinal().find("peak_nl_mll")
+zpeak_alphar_mll = zpeak_result.floatParsFinal().find("peak_alphar_mll")
+zpeak_nr_mll     = zpeak_result.floatParsFinal().find("peak_nr_mll")
 for v in [zpeak_mean_mll, zpeak_sigmal_mll, zpeak_sigmar_mll,
           zpeak_alphal_mll, zpeak_nl_mll, zpeak_alphar_mll, zpeak_nr_mll]:
     v.setConstant(True)
 
-bkgrealmll_mll = ROOT.RooCrystalBall("bkgrealmll_mll", "bkgrealmll_mll",
+bkgpeaking_mll = ROOT.RooCrystalBall("bkgpeaking_mll", "bkgpeaking_mll",
                                       mll, zpeak_mean_mll, zpeak_sigmal_mll, zpeak_sigmar_mll,
                                       zpeak_alphal_mll, zpeak_nl_mll, zpeak_alphar_mll, zpeak_nr_mll)
 
-bkgrealmll_mll_met_2dpdf = ROOT.RooProdPdf("bkgrealmll_mll_met_2dpdf",
-                                             "bkgrealmll_mll_met_2dpdf",
-                                             ROOT.RooArgList(bkgrealmll_mll, bkgrealmll_met))
+bkgpeaking_mll_met_2dpdf = ROOT.RooProdPdf("bkgpeaking_mll_met_2dpdf",
+                                             "bkgpeaking_mll_met_2dpdf",
+                                             ROOT.RooArgList(bkgpeaking_mll, bkgpeaking_met))
 
-# --- mixture (ratio_realmll is FLOATING) ---
-ratio_realmll = ROOT.RooRealVar("ratio_realmll", "ratio_realmll", 0.1, 0, 1)
+# --- mixture (ratio_peaking is FLOATING) ---
+ratio_peaking = ROOT.RooRealVar("ratio_peaking", "ratio_peaking", 0.1, 0, 1)
 
 bkgtot_mll_met_2dpdf = ROOT.RooAddPdf("bkgtot_mll_met_2dpdf", "bkgtot_mll_met_2dpdf",
-                                       ROOT.RooArgList(bkgrealmll_mll_met_2dpdf,
-                                                       bkgfakemll_mll_met_2dpdf),
-                                       ratio_realmll)
+                                       ROOT.RooArgList(bkgpeaking_mll_met_2dpdf,
+                                                       bkgnonpeak_mll_met_2dpdf),
+                                       ratio_peaking)
 
 ##################################################
 # Load combined signal + background dataset
@@ -185,8 +190,8 @@ CMS.cms_lumi = "13 TeV"
 CMS.cms_energy = ""
 
 obs_configs = [
-    (mll, 30,   60,  120, "m(ll) [GeV]", "mll_bkgAndSig_fit_to_SplusB"),
-    (met, 40,    0, 1200, "MET [GeV]",   "met_bkgAndSig_fit_to_SplusB"),
+    (mll, 40,   60.,  120., "m(ll) [GeV]", "mll_bkgAndSig_fit_to_SplusB"),
+    (met, 60,    0., 1200., "MET [GeV]",   "met_bkgAndSig_fit_to_SplusB"),
 ]
 
 n_sig_val  = n_sig.getVal()
@@ -263,7 +268,7 @@ for obs, nBins, xmin, xmax, xlabel, plotname in obs_configs:
     leg.SetBorderSize(0)
     leg.SetFillStyle(0)
     leg.SetTextSize(0.042)
-    leg.AddEntry(frame.findObject("data"),       "MC (background only)", "PE")
+    leg.AddEntry(frame.findObject("data"),       "MC (signal + background)", "PE")
     leg.AddEntry(frame.findObject("total"),       "Total model", "L")
     leg.AddEntry(frame.findObject("signal"),      f"Signal (n_{{sig}} = {n_sig.getVal():.2f} +/- {n_sig.getError():.2f})", "L")
     leg.AddEntry(frame.findObject("background"),  f"Background (n_{{bkg}} = {n_bkg.getVal():.2f} +/- {n_bkg.getError():.2f})", "L")

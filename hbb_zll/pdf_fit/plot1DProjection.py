@@ -2,7 +2,7 @@ import os, ROOT
 import cmsstyle as CMS
 import numpy as np
 
-doLog = False
+doLog = True
 
 def addOverflow(h: ROOT.TH1F) -> ROOT.TH1F:
     """
@@ -40,12 +40,12 @@ ch2, df2 = getTChainRDF(block2, "event_tree")
 # df = df.Define("gen_deltaPhi_ll_ptmiss", "compute_deltaPhi(gen_leps_p4.Phi(), gen_p4_ptmiss.Phi())")
 
 mll = ROOT.RooRealVar("m_ll", "m_ll", 60, 120) 
-met = ROOT.RooRealVar("met", "met", 0, 1200)
+met = ROOT.RooRealVar("met", "met", 200, 1200)
 weightXyear = ROOT.RooRealVar("weight_nominal_mm", "weight_nominal_mm", -1, 1)
 
 variablesInfo = [
-    ["mll", "m(ll) / GeV", 60, 60., 120., mll],
-    ["met", "MET / GeV", 40, 0., 1200., met], 
+    ["mll", "m(ll) / GeV", 40, 60., 120., mll],
+    ["met", "MET / GeV", 50, 200., 1200., met], 
     # ["weightXyear", "WeightXyear", 40, 0., 10.],
 ]
 
