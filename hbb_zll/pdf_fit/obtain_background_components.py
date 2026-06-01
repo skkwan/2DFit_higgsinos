@@ -285,7 +285,7 @@ variables = ROOT.RooArgSet(mll, met, weightXyear)
 # 1(a) First do NON-peaking background by itself: MET
 bkg_nonpeak_dataset_met = ROOT.RooDataSet("bkg_nonpeak_dataset_met", "bkg_nonpeak_dataset_met", ROOT.RooArgSet(met, weightXyear), ROOT.RooFit.Import(bkg_nonpeak_tree), ROOT.RooFit.WeightVar(weightXyear))
 mu_nonpeak_met = ROOT.RooRealVar('mu_nonpeak_met', 'mu_nonpeak_met', 225, 100, 300)
-b_nonpeak_met = ROOT.RooRealVar('b_nonpeak_met', 'b_nonpeak_met', 40, 5, 50)
+b_nonpeak_met = ROOT.RooRealVar('b_nonpeak_met', 'b_nonpeak_met', 60, 20, 100)
 bkgnonpeak_met = ROOT.RooGenericPdf("bkgnonpeak_met", "bkgnonpeak_met", "1/b_nonpeak_met * exp(-(@0 - mu_nonpeak_met)/b_nonpeak_met - exp(-(@0 - mu_nonpeak_met)/b_nonpeak_met))",
                         ROOT.RooArgList(met, mu_nonpeak_met, b_nonpeak_met))
 # Fit:
