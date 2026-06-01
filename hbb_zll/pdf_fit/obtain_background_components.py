@@ -7,25 +7,51 @@ import numpy as np
 from array import array
 import cmsstyle as CMS
 
-# From Claude and modified
-def plotFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname, nFloatParams=2, outdir="", getOverflow=True, doLog=False):
-    nBins = 50
+def plotFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname,
+            nFloatParams=2, outdir="", getOverflow=True, doLog=False, varBinEdges=None):
+    """
+    varBinEdges: optional list of bin edges used for chi^2 computation and data
+                 display on the frame. The ratio panel uses the same variable bins
+                 so numerator and denominator are on identical scales.
+    """
+    nBinsDisplay = 50
     xmin = rooVar.getMin()
     xmax = rooVar.getMax()
 
-    frame = rooVar.frame(nBins)
+    # Build chi^2 binning
+    if varBinEdges is not None:
+        nBinsChi2 = len(varBinEdges) - 1
+        chi2_binning = ROOT.RooBinning(nBinsChi2, array('d', varBinEdges))
+        data_binning_arg = ROOT.RooFit.Binning(chi2_binning)
+    else:
+        data_binning_arg = ROOT.RooFit.Binning(nBinsDisplay)
 
-    leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 4, 0.95, 0.89, textSize=0.04)
-    CMS.SetLumi("")
+    # Frame uses many bins so the PDF curve looks smooth
+    frame = rooVar.frame(nBinsDisplay)
 
-    data_hist = dataset.createHistogram("histo_" + plotname, rooVar, ROOT.RooFit.Binning(nBins, xmin, xmax))
-    if getOverflow:
-        data_hist.SetBinContent(data_hist.GetNbinsX(), data_hist.GetBinContent(data_hist.GetNbinsX()) + data_hist.GetBinContent(data_hist.GetNbinsX() + 1))
-    pdf_hist = pdf.createHistogram("hpdf_" + plotname, rooVar, ROOT.RooFit.Binning(nBins))
-    if getOverflow:
-        pdf_hist.SetBinContent(pdf_hist.GetNbinsX(), pdf_hist.GetBinContent(pdf_hist.GetNbinsX()) + pdf_hist.GetBinContent(pdf_hist.GetNbinsX() + 1))
+    # Plot data and PDF on the frame first so frame.GetMaximum() reflects the
+    # actual displayed scale (PDF is normalized to data by RooFit, so
+    # pdf.createHistogram() alone underestimates the true curve maximum).
+    dataset.plotOn(frame, ROOT.RooFit.Name("data_" + plotname),
+                   ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#9c9ca1")),
+                   ROOT.RooFit.LineWidth(2),
+                   ROOT.RooFit.MarkerColor(ROOT.TColor.GetColor("#9c9ca1")),
+                   ROOT.RooFit.MarkerSize(1),
+                   data_binning_arg)
+
+    pdf.plotOn(frame, ROOT.RooFit.Name("pdf_" + plotname),
+               ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#bd1f01")),
+               ROOT.RooFit.LineWidth(2),
+               ROOT.RooFit.LineStyle(1),
+               ROOT.RooFit.MarkerSize(0),
+               ROOT.RooFit.Binning(nBinsDisplay))
+
+    roo_curve = frame.getCurve("pdf_" + plotname)
+    chi2_per_ndf = frame.chiSquare("pdf_" + plotname, "data_" + plotname, nFloatParams)
+
+    # Derive y_max from the frame's actual maximum so the full curve is visible.
     y_min = 0
-    y_max = 1.8 * max(data_hist.GetMaximum(), pdf_hist.GetMaximum())
+    y_max = 1.5 * frame.GetMaximum()
     if doLog:
         y_min = 1e-10
         y_max = y_max * 1000
@@ -44,36 +70,35 @@ def plotFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname, nFloatPar
         ROOT.gPad.SetLogy()
     CMS.UpdatePad(canv)
 
-    dataset.plotOn(frame, ROOT.RooFit.Name("data_" + plotname),
-                   ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#9c9ca1")),
-                   ROOT.RooFit.LineWidth(2),
-                   ROOT.RooFit.MarkerColor(ROOT.TColor.GetColor("#9c9ca1")),
-                   ROOT.RooFit.MarkerSize(1),
-                   ROOT.RooFit.Binning(nBins))
+    leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 4, 0.95, 0.89, textSize=0.04)
+    CMS.SetLumi("")
     leg.AddEntry(frame.findObject("data_" + plotname), dataLabel)
-
-    pdf.plotOn(frame, ROOT.RooFit.Name("pdf_" + plotname),
-               ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#bd1f01")),
-               ROOT.RooFit.LineWidth(2),
-               ROOT.RooFit.LineStyle(1),
-               ROOT.RooFit.MarkerSize(0),
-               ROOT.RooFit.Binning(nBins))
     leg.AddEntry(frame.findObject("pdf_" + plotname), fitLabel)
-
-    roo_curve = frame.getCurve("pdf_" + plotname)
-    chi2_per_ndf = frame.chiSquare("pdf_" + plotname, "data_" + plotname, nFloatParams)
     leg.SetHeader(f"2018 SR: background MET ( #chi^{{2}}/ndf = {chi2_per_ndf:.2f})")
     frame.Draw("SAME")
 
-    # Ratio plot
+    # Ratio panel: use the same binning as chi^2 so numerator and denominator
+    # are on identical scales (avoids normalization mismatch from mixed bin widths).
     canv.cd(2)
-    data_ratio = data_hist.Clone()
-    prediction = data_hist.Clone()
-    for i in range(1, data_ratio.GetNbinsX() + 1):
-        thisXval = data_ratio.GetBinCenter(i)
-        pdfY = roo_curve.Eval(thisXval)
-        prediction.SetBinContent(i, pdfY)
-    data_ratio.Divide(prediction)
+    if varBinEdges is not None:
+        data_ratio = dataset.createHistogram("histo_ratio_" + plotname, rooVar,
+                                             ROOT.RooFit.Binning(chi2_binning))
+        pdf_ratio = pdf.createHistogram("hpdf_ratio_" + plotname, rooVar,
+                                        ROOT.RooFit.Binning(chi2_binning))
+        if pdf_ratio.Integral() > 0:
+            pdf_ratio.Scale(data_ratio.Integral() / pdf_ratio.Integral())
+        data_ratio.Divide(pdf_ratio)
+    else:
+        data_hist = dataset.createHistogram("histo_" + plotname, rooVar,
+                                            ROOT.RooFit.Binning(nBinsDisplay, xmin, xmax))
+        if getOverflow:
+            nb = data_hist.GetNbinsX()
+            data_hist.SetBinContent(nb, data_hist.GetBinContent(nb) + data_hist.GetBinContent(nb + 1))
+        data_ratio = data_hist.Clone()
+        prediction = data_hist.Clone()
+        for i in range(1, data_ratio.GetNbinsX() + 1):
+            prediction.SetBinContent(i, roo_curve.Eval(data_ratio.GetBinCenter(i)))
+        data_ratio.Divide(prediction)
     data_ratio.SetMarkerColor(ROOT.kBlack)
     data_ratio.SetLineColor(ROOT.kBlack)
     CMS.cmsObjectDraw(data_ratio, "E", MarkerStyle=ROOT.kFullCircle)
@@ -104,23 +129,40 @@ def plotMETPDFTogether(rooVar, peaking_dataset, nonpeak_dataset,
 
     frame = rooVar.frame(nBins)
 
-    leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 4, 0.9, 0.89, textSize=0.04)
-    leg.SetHeader("2018 SR: background MET components")
-    CMS.SetLumi("")
+    # Plot all objects on the frame first so frame.GetMaximum() reflects the
+    # actual displayed scale after RooFit normalization.
+    peaking_dataset.plotOn(frame, ROOT.RooFit.Name("peaking_data_" + plotname),
+                           ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#5790fc")),
+                           ROOT.RooFit.LineWidth(2),
+                           ROOT.RooFit.MarkerColor(ROOT.TColor.GetColor("#5790fc")),
+                           ROOT.RooFit.MarkerSize(1),
+                           ROOT.RooFit.Binning(nBins))
 
-    peak_hist = peaking_dataset.createHistogram("histo_peak_" + plotname, rooVar, ROOT.RooFit.Binning(nBins, xmin, xmax))
-    nonpeak_hist = nonpeak_dataset.createHistogram("histo_nonpeak_" + plotname, rooVar, ROOT.RooFit.Binning(nBins, xmin, xmax))
-    if getOverflow:
-        peak_hist.SetBinContent(peak_hist.GetNbinsX(), peak_hist.GetBinContent(peak_hist.GetNbinsX()) + peak_hist.GetBinContent(peak_hist.GetNbinsX() + 1))
-        nonpeak_hist.SetBinContent(nonpeak_hist.GetNbinsX(), nonpeak_hist.GetBinContent(nonpeak_hist.GetNbinsX()) + nonpeak_hist.GetBinContent(nonpeak_hist.GetNbinsX() + 1))
-    peak_pdf_hist = peaking_pdf.createHistogram("hpdf_peak_" + plotname, rooVar, ROOT.RooFit.Binning(nBins))
-    nonpeak_pdf_hist = nonpeak_pdf.createHistogram("hpdf_nonpeak_" + plotname, rooVar, ROOT.RooFit.Binning(nBins))
-    if getOverflow:
-        peak_pdf_hist.SetBinContent(peak_pdf_hist.GetNbinsX(), peak_pdf_hist.GetBinContent(peak_pdf_hist.GetNbinsX()) + peak_pdf_hist.GetBinContent(peak_pdf_hist.GetNbinsX() + 1))
-        nonpeak_pdf_hist.SetBinContent(nonpeak_pdf_hist.GetNbinsX(), nonpeak_pdf_hist.GetBinContent(nonpeak_pdf_hist.GetNbinsX()) + nonpeak_pdf_hist.GetBinContent(nonpeak_pdf_hist.GetNbinsX() + 1))
+    nonpeak_dataset.plotOn(frame, ROOT.RooFit.Name("nonpeak_data_" + plotname),
+                           ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#964a8b")),
+                           ROOT.RooFit.LineWidth(2),
+                           ROOT.RooFit.MarkerColor(ROOT.TColor.GetColor("#964a8b")),
+                           ROOT.RooFit.MarkerSize(1),
+                           ROOT.RooFit.Binning(nBins))
+
+    peaking_pdf.plotOn(frame, ROOT.RooFit.Name("peaking_pdf_" + plotname),
+                       ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#f89c20")),
+                       ROOT.RooFit.LineWidth(2),
+                       ROOT.RooFit.LineStyle(1),
+                       ROOT.RooFit.MarkerSize(0),
+                       ROOT.RooFit.Normalization(peaking_dataset.sumEntries(), ROOT.RooAbsReal.NumEvent),
+                       ROOT.RooFit.Binning(nBins))
+
+    nonpeak_pdf.plotOn(frame, ROOT.RooFit.Name("nonpeak_pdf_" + plotname),
+                       ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#e42536")),
+                       ROOT.RooFit.LineWidth(2),
+                       ROOT.RooFit.LineStyle(1),
+                       ROOT.RooFit.MarkerSize(0),
+                       ROOT.RooFit.Normalization(nonpeak_dataset.sumEntries(), ROOT.RooAbsReal.NumEvent),
+                       ROOT.RooFit.Binning(nBins))
+
     y_min = 0
-    y_max = 1.8 * max(peak_hist.GetMaximum(), nonpeak_hist.GetMaximum(),
-                      peak_pdf_hist.GetMaximum(), nonpeak_pdf_hist.GetMaximum())
+    y_max = 1.5 * frame.GetMaximum()
     if doLog:
         y_min = 1e-10
         y_max = y_max * 1000
@@ -139,38 +181,12 @@ def plotMETPDFTogether(rooVar, peaking_dataset, nonpeak_dataset,
         ROOT.gPad.SetLogy()
     CMS.UpdatePad(canv)
 
-    peaking_dataset.plotOn(frame, ROOT.RooFit.Name("peaking_data_" + plotname),
-                           ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#5790fc")),
-                           ROOT.RooFit.LineWidth(2),
-                           ROOT.RooFit.MarkerColor(ROOT.TColor.GetColor("#5790fc")),
-                           ROOT.RooFit.MarkerSize(1),
-                           ROOT.RooFit.Binning(nBins))
+    leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 4, 0.9, 0.89, textSize=0.04)
+    leg.SetHeader("2018 SR: background MET components")
+    CMS.SetLumi("")
     leg.AddEntry(frame.findObject("peaking_data_" + plotname), "Peaking-in-m(ll) background")
-
-    nonpeak_dataset.plotOn(frame, ROOT.RooFit.Name("nonpeak_data_" + plotname),
-                           ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#964a8b")),
-                           ROOT.RooFit.LineWidth(2),
-                           ROOT.RooFit.MarkerColor(ROOT.TColor.GetColor("#964a8b")),
-                           ROOT.RooFit.MarkerSize(1),
-                           ROOT.RooFit.Binning(nBins))
     leg.AddEntry(frame.findObject("nonpeak_data_" + plotname), "Non-peaking-in-m(ll) background")
-
-    peaking_pdf.plotOn(frame, ROOT.RooFit.Name("peaking_pdf_" + plotname),
-                       ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#f89c20")),
-                       ROOT.RooFit.LineWidth(2),
-                       ROOT.RooFit.LineStyle(1),
-                       ROOT.RooFit.MarkerSize(0),
-                       ROOT.RooFit.Normalization(peaking_dataset.sumEntries(), ROOT.RooAbsReal.NumEvent),
-                       ROOT.RooFit.Binning(nBins))
     leg.AddEntry(frame.findObject("peaking_pdf_" + plotname), "Peaking Gumbel fit")
-
-    nonpeak_pdf.plotOn(frame, ROOT.RooFit.Name("nonpeak_pdf_" + plotname),
-                       ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#e42536")),
-                       ROOT.RooFit.LineWidth(2),
-                       ROOT.RooFit.LineStyle(1),
-                       ROOT.RooFit.MarkerSize(0),
-                       ROOT.RooFit.Normalization(nonpeak_dataset.sumEntries(), ROOT.RooAbsReal.NumEvent),
-                       ROOT.RooFit.Binning(nBins))
     leg.AddEntry(frame.findObject("nonpeak_pdf_" + plotname), "Non-peaking Gumbel fit")
 
     frame.Draw("SAME")
@@ -196,17 +212,26 @@ def plotMETPDFsOnly(rooVar, peaking_pdf, nonpeak_pdf, plotname, outdir="", getOv
 
     frame = rooVar.frame(nBins)
 
-    leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 2, 0.9, 0.89, textSize=0.04)
-    leg.SetHeader("2018 SR: background MET components")
-    CMS.SetLumi("")
+    # Plot PDFs on the frame first so frame.GetMaximum() reflects the actual
+    # displayed scale after RooFit normalization.
+    peaking_pdf.plotOn(frame, ROOT.RooFit.Name("peaking_pdf_" + plotname),
+                       ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#f89c20")),
+                       ROOT.RooFit.LineWidth(2),
+                       ROOT.RooFit.LineStyle(1),
+                       ROOT.RooFit.MarkerSize(0),
+                       ROOT.RooFit.Normalization(1.0, ROOT.RooAbsReal.NumEvent),
+                       ROOT.RooFit.Binning(nBins))
 
-    peak_pdf_hist = peaking_pdf.createHistogram("hpdf_peak_" + plotname, rooVar, ROOT.RooFit.Binning(nBins))
-    nonpeak_pdf_hist = nonpeak_pdf.createHistogram("hpdf_nonpeak_" + plotname, rooVar, ROOT.RooFit.Binning(nBins))
-    if getOverflow:
-        peak_pdf_hist.SetBinContent(peak_pdf_hist.GetNbinsX(), peak_pdf_hist.GetBinContent(peak_pdf_hist.GetNbinsX()) + peak_pdf_hist.GetBinContent(peak_pdf_hist.GetNbinsX() + 1))
-        nonpeak_pdf_hist.SetBinContent(nonpeak_pdf_hist.GetNbinsX(), nonpeak_pdf_hist.GetBinContent(nonpeak_pdf_hist.GetNbinsX()) + nonpeak_pdf_hist.GetBinContent(nonpeak_pdf_hist.GetNbinsX() + 1))
+    nonpeak_pdf.plotOn(frame, ROOT.RooFit.Name("nonpeak_pdf_" + plotname),
+                       ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#e42536")),
+                       ROOT.RooFit.LineWidth(2),
+                       ROOT.RooFit.LineStyle(1),
+                       ROOT.RooFit.MarkerSize(0),
+                       ROOT.RooFit.Normalization(1.0, ROOT.RooAbsReal.NumEvent),
+                       ROOT.RooFit.Binning(nBins))
+
     y_min = 0
-    y_max = 1.8 * max(peak_pdf_hist.GetMaximum(), nonpeak_pdf_hist.GetMaximum())
+    y_max = 1.5 * frame.GetMaximum()
     if doLog:
         y_min = 1e-10
         y_max = y_max * 1000
@@ -225,22 +250,10 @@ def plotMETPDFsOnly(rooVar, peaking_pdf, nonpeak_pdf, plotname, outdir="", getOv
         ROOT.gPad.SetLogy()
     CMS.UpdatePad(canv)
 
-    peaking_pdf.plotOn(frame, ROOT.RooFit.Name("peaking_pdf_" + plotname),
-                       ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#f89c20")),
-                       ROOT.RooFit.LineWidth(2),
-                       ROOT.RooFit.LineStyle(1),
-                       ROOT.RooFit.MarkerSize(0),
-                       ROOT.RooFit.Normalization(1.0, ROOT.RooAbsReal.NumEvent),
-                       ROOT.RooFit.Binning(nBins))
+    leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 2, 0.9, 0.89, textSize=0.04)
+    leg.SetHeader("2018 SR: background MET components")
+    CMS.SetLumi("")
     leg.AddEntry(frame.findObject("peaking_pdf_" + plotname), "Peaking Gumbel fit")
-
-    nonpeak_pdf.plotOn(frame, ROOT.RooFit.Name("nonpeak_pdf_" + plotname),
-                       ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#e42536")),
-                       ROOT.RooFit.LineWidth(2),
-                       ROOT.RooFit.LineStyle(1),
-                       ROOT.RooFit.MarkerSize(0),
-                       ROOT.RooFit.Normalization(1.0, ROOT.RooAbsReal.NumEvent),
-                       ROOT.RooFit.Binning(nBins))
     leg.AddEntry(frame.findObject("nonpeak_pdf_" + plotname), "Non-peaking Gumbel fit")
 
     frame.Draw("SAME")
@@ -258,6 +271,15 @@ def plotMETPDFsOnly(rooVar, peaking_pdf, nonpeak_pdf, plotname, outdir="", getOv
     del canv
     del leg
 
+
+##################################################
+##### Variable bin edges for MET chi^2
+# 200-400 GeV: 20 GeV bins (10 bins, high-statistics peak region)
+# 400-480 GeV: 80 GeV bin  (merges the 400-500 scatter)
+# 480-600 GeV: 120 GeV bin
+# 600-1200 GeV: 600 GeV bin (sparse tail merged into one)
+##################################################
+met_var_bins = [200, 220, 240, 260, 280, 300, 320, 340, 360, 380, 400, 480, 600, 1200]
 
 ##################################################
 ##### Define fit observables
@@ -331,11 +353,11 @@ for doLog in [True, False]:
     plotFit("MET", met, bkg_nonpeak_dataset_met, bkgnonpeak_met,
                "Non-peaking-in-m(ll) background",
                f"Gumbel fit (#mu={mu_nonpeak_met.getVal():.1f} #pm {mu_nonpeak_met.getError():.1f}, b={b_nonpeak_met.getVal():.1f}#pm{b_nonpeak_met.getError():.1f})",
-               "bkg_nonpeak_met_gumbel", doLog=doLog)
+               "bkg_nonpeak_met_gumbel", varBinEdges=met_var_bins, doLog=doLog)
     plotFit("MET", met, bkg_peaking_dataset_met, bkgpeaking_met,
                "Peaking-in-m(ll) background",
                f"Gumbel fit (#mu={mu_peaking_met.getVal():.1f} #pm {mu_peaking_met.getError():.1f}, b={b_peaking_met.getVal():.1f}#pm{b_peaking_met.getError():.1f})",
-               "bkg_peaking_met_gumbel", doLog=doLog)
+               "bkg_peaking_met_gumbel", varBinEdges=met_var_bins, doLog=doLog)
     plotFit("m(ll)", mll, bkg_nonpeak_dataset_mll, bkgnonpeak_mll,
                "Non-peaking-in-m(ll) background",
                f"Exponential fit (a={a_nonpeak_mll.getVal():.2f}  #pm {a_nonpeak_mll.getError():.2f})",
