@@ -56,12 +56,18 @@ def plotFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname,
         y_min = 1e-10
         y_max = y_max * 1000
 
+    # If you want to have "CMS (Private work)" and not the "CMS (Preliminary)" default text,
+    # you need both of the following lines
+    CMS.SetExtraText("Private work")
+    CMS.SetCmsText("CMS", font=62, size=0.76)
+    CMS.SetLumi(250, unit="fb", run="2018")
+
     canv = CMS.cmsDiCanvas("canv_" + plotname, x_min=xmin, x_max=xmax, y_min=y_min, y_max=y_max,
                            r_min=0, r_max=2,
                            nameXaxis=f"{name} / GeV",
                            nameYaxis="Shape (A.U.)",
                            nameRatio="MC/Pred",
-                           square=CMS.kSquare, iPos=0)
+                           square=True, iPos=0)
     canv.SetRightMargin(0.05)
     CMS.UpdatePad(canv)
 
@@ -70,8 +76,9 @@ def plotFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname,
         ROOT.gPad.SetLogy()
     CMS.UpdatePad(canv)
 
-    leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 4, 0.95, 0.89, textSize=0.04)
-    CMS.SetLumi("")
+    leg = CMS.cmsLeg(0.2, 0.89 - 0.05 * 4, 0.95, 0.89, textSize=0.04)
+    CMS.SetLumi(250, unit="fb", run="2018")
+
     leg.AddEntry(frame.findObject("data_" + plotname), dataLabel)
     leg.AddEntry(frame.findObject("pdf_" + plotname), fitLabel)
     leg.SetHeader(f"2018 SR: background MET ( #chi^{{2}}/ndf = {chi2_per_ndf:.2f})")
@@ -172,7 +179,7 @@ def plotMETPDFTogether(rooVar, peaking_dataset, nonpeak_dataset,
                            nameXaxis="MET / GeV",
                            nameYaxis="Shape (A.U.)",
                            nameRatio="MC/Pred",
-                           square=CMS.kSquare, iPos=0)
+                           square=True, iPos=0)
     canv.SetRightMargin(0.05)
     CMS.UpdatePad(canv)
 
@@ -181,9 +188,10 @@ def plotMETPDFTogether(rooVar, peaking_dataset, nonpeak_dataset,
         ROOT.gPad.SetLogy()
     CMS.UpdatePad(canv)
 
-    leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 4, 0.9, 0.89, textSize=0.04)
+    leg = CMS.cmsLeg(0.2, 0.89 - 0.05 * 4, 0.9, 0.89, textSize=0.04)
     leg.SetHeader("2018 SR: background MET components")
-    CMS.SetLumi("")
+    CMS.SetLumi(250, unit="fb", run="2018")
+
     leg.AddEntry(frame.findObject("peaking_data_" + plotname), "Peaking-in-m(ll) background")
     leg.AddEntry(frame.findObject("nonpeak_data_" + plotname), "Non-peaking-in-m(ll) background")
     leg.AddEntry(frame.findObject("peaking_pdf_" + plotname), "Peaking Gumbel fit")
@@ -196,6 +204,78 @@ def plotMETPDFTogether(rooVar, peaking_dataset, nonpeak_dataset,
     CMS.UpdatePad(canv)
 
     fname = plotname + ("-log" if doLog else "")
+    canv.SaveAs(f"{fname}.pdf")
+    canv.SaveAs(f"{fname}.png")
+    if outdir:
+        os.system(f"mv {fname}.* {outdir}")
+
+    del canv
+    del leg
+
+
+def plotInputHistogram(name, rooVar, dataset, label, plotname, color,
+                       varBinEdges=None, nBins=50, outdir="", doLog=False):
+    """
+    Plot the raw input histogram with variable or uniform binning. From Claude
+    """
+    xmin = rooVar.getMin()
+    xmax = rooVar.getMax()
+
+    if varBinEdges is not None:
+        binning = ROOT.RooBinning(len(varBinEdges) - 1, array('d', varBinEdges))
+        h = dataset.createHistogram("h_input_" + plotname, rooVar,
+                                    ROOT.RooFit.Binning(binning))
+    else:
+        h = dataset.createHistogram("h_input_" + plotname, rooVar,
+                                    ROOT.RooFit.Binning(nBins, xmin, xmax))
+
+    n_events = dataset.sumEntries()
+    h.SetLineColor(ROOT.TColor.GetColor(color))
+    h.SetMarkerColor(ROOT.TColor.GetColor(color))
+    h.SetMarkerStyle(ROOT.kFullCircle)
+    h.SetMarkerSize(1)
+    h.SetLineWidth(2)
+
+    y_min = 0
+    y_max = h.GetMaximum() * 1.5
+    if doLog:
+        y_min = 1e-10
+        y_max = h.GetMaximum() * 1000
+
+    CMS.SetCmsText("CMS", font=62, size=0.76)
+    CMS.SetLumi(250, run="2018")
+    canv = CMS.cmsCanvas("canv_input_" + plotname, xmin, xmax, y_min, y_max,
+                         nameXaxis=f"{name} / GeV",
+                         nameYaxis="Events",
+                         square=True, iPos=0) # extraSpace=0.05, yTitOffset=1.6, iPos=0)
+    canv.SetRightMargin(0.1)
+    CMS.UpdatePad(canv)
+
+    if doLog:
+        ROOT.gPad.SetLogy()
+        CMS.UpdatePad(canv)
+
+    leg = CMS.cmsLeg(0.25, 0.92 - 0.05 * 3, 0.90, 0.92, textSize=0.03)
+    leg.SetMargin(0.12)
+    # leg.SetBorderSize(1)
+    # leg.SetLineColor(ROOT.kBlack)
+    # leg.SetLineWidth(1)
+    leg.AddEntry(h, label + f" (n = {n_events:.2f})")
+
+    CMS.cmsObjectDraw(h, "E1")
+    CMS.cmsObjectDraw(leg)
+ 
+    if varBinEdges is not None:
+        for obj in canv.GetListOfPrimitives():
+            if obj.InheritsFrom("TH1"):
+                obj.GetXaxis().SetNdivisions(5, False)
+                break
+        ROOT.gPad.Modified()
+        ROOT.gPad.Update()
+
+    CMS.UpdatePad(canv)
+
+    fname = "input_" + plotname + ("-log" if doLog else "")
     canv.SaveAs(f"{fname}.pdf")
     canv.SaveAs(f"{fname}.png")
     if outdir:
@@ -241,7 +321,7 @@ def plotMETPDFsOnly(rooVar, peaking_pdf, nonpeak_pdf, plotname, outdir="", getOv
                            nameXaxis="MET / GeV",
                            nameYaxis="Shape (A.U.)",
                            nameRatio="MC/Pred",
-                           square=CMS.kSquare, iPos=0)
+                           square=True, iPos=0)
     canv.SetRightMargin(0.05)
     CMS.UpdatePad(canv)
 
@@ -250,9 +330,9 @@ def plotMETPDFsOnly(rooVar, peaking_pdf, nonpeak_pdf, plotname, outdir="", getOv
         ROOT.gPad.SetLogy()
     CMS.UpdatePad(canv)
 
-    leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 2, 0.9, 0.89, textSize=0.04)
+    leg = CMS.cmsLeg(0.2, 0.89 - 0.05 * 2, 0.9, 0.89, textSize=0.04)
     leg.SetHeader("2018 SR: background MET components")
-    CMS.SetLumi("")
+    CMS.SetLumi(250, unit="fb", run="2018")
     leg.AddEntry(frame.findObject("peaking_pdf_" + plotname), "Peaking Gumbel fit")
     leg.AddEntry(frame.findObject("nonpeak_pdf_" + plotname), "Non-peaking Gumbel fit")
 
@@ -280,6 +360,8 @@ def plotMETPDFsOnly(rooVar, peaking_pdf, nonpeak_pdf, plotname, outdir="", getOv
 # 600-1200 GeV: 600 GeV bin (sparse tail merged into one)
 ##################################################
 met_var_bins = [200, 220, 240, 260, 280, 300, 320, 340, 360, 380, 400, 480, 600, 1200]
+
+ROOT.gStyle.SetImageScaling(3.)
 
 ##################################################
 ##### Define fit observables
@@ -362,6 +444,15 @@ for doLog in [True, False]:
                "Non-peaking-in-m(ll) background",
                f"Exponential fit (a={a_nonpeak_mll.getVal():.2f}  #pm {a_nonpeak_mll.getError():.2f})",
                "bkg_nonpeak_mll_exponential", doLog=doLog)
+    plotInputHistogram("MET", met, bkg_nonpeak_dataset_met,
+                       "Non-peaking-in-m(ll) background", "bkg_nonpeak_met_input",
+                       color="#964a8b", varBinEdges=met_var_bins, doLog=doLog)
+    plotInputHistogram("MET", met, bkg_peaking_dataset_met,
+                       "Peaking-in-m(ll) background", "bkg_peaking_met_input",
+                       color="#5790fc", varBinEdges=met_var_bins, doLog=doLog)
+    plotInputHistogram("m(ll)", mll, bkg_nonpeak_dataset_mll,
+                       "Non-peaking-in-m(ll) background", "bkg_nonpeak_mll_input",
+                       color="#964a8b", nBins=50, doLog=doLog)
 # plotMETPDFTogether(met,
 #                    bkg_peaking_dataset, bkg_nonpeak_dataset,
 #                    bkg_peaking_met_pdf, bkgnonpeak_met,
