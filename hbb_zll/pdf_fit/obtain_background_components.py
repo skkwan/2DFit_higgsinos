@@ -119,8 +119,13 @@ def plotFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname,
     CMS.UpdatePad(canv)
 
     fname = plotname + ("-log" if doLog else "")
-    canv.SaveAs(f"{fname}.pdf")
+    # ROOT's TPDF backend clips text in sub-pad top margins; use EPS→PDF instead.
+    # -dEPSCrop trims the PDF page to the EPS BoundingBox, avoiding ps2pdf whitespace.
+    canv.SaveAs(f"{fname}.eps")
+    os.system(f"ps2pdf -dEPSCrop {fname}.eps {fname}.pdf && rm {fname}.eps")
+    ROOT.gStyle.SetImageScaling(3.)
     canv.SaveAs(f"{fname}.png")
+    ROOT.gStyle.SetImageScaling(1.)
     if outdir:
         os.system(f"mv {fname}.* {outdir}")
 
@@ -276,8 +281,11 @@ def plotInputHistogram(name, rooVar, dataset, label, plotname, color,
     CMS.UpdatePad(canv)
 
     fname = "input_" + plotname + ("-log" if doLog else "")
-    canv.SaveAs(f"{fname}.pdf")
+    canv.SaveAs(f"{fname}.eps")
+    os.system(f"ps2pdf -dEPSCrop {fname}.eps {fname}.pdf && rm {fname}.eps")
+    ROOT.gStyle.SetImageScaling(3.)
     canv.SaveAs(f"{fname}.png")
+    ROOT.gStyle.SetImageScaling(1.)
     if outdir:
         os.system(f"mv {fname}.* {outdir}")
 
@@ -357,7 +365,7 @@ def plotMETPDFsOnly(rooVar, peaking_pdf, nonpeak_pdf, plotname, outdir="", getOv
 ##################################################
 met_var_bins = [200, 220, 240, 260, 280, 300, 320, 340, 360, 380, 400, 480, 600, 1200]
 
-ROOT.gStyle.SetImageScaling(3.)
+ROOT.gStyle.SetImageScaling(1.)  # set to 3 only immediately before PNG saves
 
 ##################################################
 ##### Define fit observables
