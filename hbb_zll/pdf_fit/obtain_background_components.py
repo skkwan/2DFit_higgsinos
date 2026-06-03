@@ -354,10 +354,6 @@ def plotMETPDFsOnly(rooVar, peaking_pdf, nonpeak_pdf, plotname, outdir="", getOv
 
 ##################################################
 ##### Variable bin edges for MET chi^2
-# 200-400 GeV: 20 GeV bins (10 bins, high-statistics peak region)
-# 400-480 GeV: 80 GeV bin  (merges the 400-500 scatter)
-# 480-600 GeV: 120 GeV bin
-# 600-1200 GeV: 600 GeV bin (sparse tail merged into one)
 ##################################################
 met_var_bins = [200, 220, 240, 260, 280, 300, 320, 340, 360, 380, 400, 480, 600, 1200]
 
