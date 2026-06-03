@@ -264,13 +264,13 @@ for obs, nBins, xmin, xmax, xlabel, plotname in obs_configs:
     frame.SetMaximum(1.6 * frame.GetMaximum())
     frame.Draw()
 
-    leg = ROOT.TLegend(0.40, 0.65, 0.90, 0.90)
+    leg = ROOT.TLegend(0.20, 0.65, 0.90, 0.90)
     leg.SetBorderSize(0)
     leg.SetFillStyle(0)
     leg.SetTextSize(0.042)
     leg.AddEntry(frame.findObject("data"),       "MC (signal + background)", "PE")
     leg.AddEntry(frame.findObject("total"),       "Total model", "L")
-    leg.AddEntry(frame.findObject("signal"),      f"Signal (n_{{sig}} = {n_sig.getVal():.2f} +/- {n_sig.getError():.2f})", "L")
+    leg.AddEntry(frame.findObject("signal"),      f"Signal (650, 1) GeV (n_{{sig}} = {n_sig.getVal():.2f} +/- {n_sig.getError():.2f})", "L")
     leg.AddEntry(frame.findObject("background"),  f"Background (n_{{bkg}} = {n_bkg.getVal():.2f} +/- {n_bkg.getError():.2f})", "L")
     leg.Draw()
     # CMS_lumi draws the CMS text and luminosity information on the *specified* pad: https://cmsstyle.readthedocs.io/en/latest/reference/#cmsstyle.cmsstyle.CMS_lumi
