@@ -11,6 +11,7 @@ import ROOT
 from ROOT import RooFit as RF
 import cmsstyle as CMS
 import os
+import numpy as np
 
 ##################################################
 # Load pre-fit results
@@ -179,24 +180,102 @@ print("Saved to fit2D_result_signal_plus_background.root")
 
 ##################################################
 # 1D projection plots (mll and MET)
-# Each canvas: main pad (data + model components) + pull pad
+# Each canvas: main pad (data + model components) + ratio (pull) pad
 ##################################################
-ROOT.gROOT.SetBatch(True)
-ROOT.gStyle.SetOptStat(0)
-ROOT.gStyle.SetOptTitle(0)
-CMS.setCMSStyle()
-CMS.SetExtraText("Simulation Preliminary")
-CMS.cms_lumi = "13 TeV"
-CMS.cms_energy = ""
 
 obs_configs = [
-    (mll, 30,   60,  120, "m(ll) [GeV]", "mll_bkgOnly_fit_to_SplusB"),
-    (met, 40,    0, 1200, "MET [GeV]",   "met_bkgOnly_fit_to_SplusB"),
+    (mll, 30,   60,  120, "m(ll) / GeV", "mll_bkgOnly_fit_to_SplusB"),
+    (met, 40,    0, 1200, "MET / GeV",   "met_bkgOnly_fit_to_SplusB"),
 ]
 
-n_sig_val  = n_sig.getVal()
-n_bkg_val  = n_bkg.getVal()
-n_tot_val  = n_sig_val + n_bkg_val
+n_sig_val     = n_sig.getVal()
+n_bkg_val     = n_bkg.getVal()
+n_bkg_err     = n_bkg.getError()
+n_tot_val     = n_sig_val + n_bkg_val
+n_peak_val    = n_bkg_val * ratio_peaking.getVal()
+n_nonpeak_val = n_bkg_val * (1 - ratio_peaking.getVal())
+ratio_val         = ratio_peaking.getVal()
+ratio_err         = ratio_peaking.getError()
+
+# Errors in quadrature
+n_peak_err    = np.sqrt( (ratio_val * n_bkg_err)**2 + (n_bkg_val * ratio_err) **2 )
+n_nonpeak_err = np.sqrt( ((1 - ratio_val) * n_bkg_err)**2 + ((n_bkg_val * ratio_err)**2)  )
+
+
+def make_plot(frame, obs, nBins, xmin, xmax, xlabel, plotname, doLog,
+              n_sig, n_bkg, n_peak_val, n_peak_err, n_nonpeak_val, n_nonpeak_err,
+              ratio_val, ratio_err):
+    if doLog:
+        plotname = f"{plotname}_logscale"
+        y_min = 1e-6
+        y_max = frame.GetMaximum() * 1e10
+        frame.SetMinimum(y_min)
+        frame.SetMaximum(y_max)
+    else:
+        y_min = 0
+        y_max = 2.2 * frame.GetMaximum()
+
+    # Pull histogram: (data - model) / sigma_data, bin-by-bin
+    pull_hist = frame.pullHist("data", "total")
+    pull_hist.SetMarkerStyle(ROOT.kFullCircle)
+    pull_hist.SetMarkerSize(0.8)
+
+    frame_pull = obs.frame(RF.Bins(nBins), RF.Range(xmin, xmax), RF.Title(""))
+    frame_pull.addPlotable(pull_hist, "P")
+
+    # If you want to have "CMS (Private work)" and not the "CMS (Preliminary)" default text,
+    # you need both of the following lines
+    CMS.SetExtraText("Private work")
+    CMS.SetCmsText("CMS", font=62, size=0.76)
+    CMS.SetLumi(250, unit="fb", run="2018")
+
+    canv = CMS.cmsDiCanvas("canv_" + plotname, x_min=xmin, x_max=xmax, y_min=y_min, y_max=y_max,
+                           r_min=0, r_max=2,
+                           nameXaxis=f"{xlabel}",
+                           nameYaxis="Events",
+                           nameRatio="Pull",
+                           square=True, iPos=0)
+    canv.SetRightMargin(0.05)
+    CMS.UpdatePad(canv)
+
+    canv.cd(1)
+    if doLog:
+        ROOT.gPad.SetLogy()
+
+    leg = ROOT.TLegend(0.25, 0.50, 0.90, 0.90)
+    leg.SetBorderSize(0)
+    leg.SetFillStyle(0)
+    leg.SetTextSize(0.035)
+    leg.AddEntry(frame.findObject("data"),        "MC (background only)", "PE")
+    leg.AddEntry(frame.findObject("total"),        "Total model", "L")
+    leg.AddEntry(frame.findObject("signal"),       f"Signal (650, 1) GeV (n_{{sig}} = {n_sig.getVal():.2f} +/- {n_sig.getError():.2f})", "L")
+    leg.AddEntry(frame.findObject("bkg_peaking"),  f"Peaking background (n_{{peak}} = {n_peak_val:.2f} +/- {n_peak_err:.2f})", "L")
+    leg.AddEntry(frame.findObject("bkg_nonpeak"),  f"Non-peaking background (n_{{nonpeak}} = {n_nonpeak_val:.2f} +/- {n_nonpeak_err:.2f})", "L")
+    r_dummy = ROOT.TLine()
+    r_dummy.SetLineWidth(0)
+    r_dummy.SetLineColor(0)
+    leg.AddEntry(r_dummy, f"Total background yield: n_{{bkg}} = {n_bkg.getVal():.2f} +/- {n_bkg.getError():.2f}", "L")
+    leg.AddEntry(r_dummy, f"Ratio r (peaking/ total) = {ratio_val:.2f}  #pm {ratio_err:.2f}", "L")
+    frame.Draw("SAME")
+
+    canv.cd(2)
+    frame_pull.Draw("SAME")
+    zero_line = ROOT.TLine(xmin, 0, xmax, 0)
+    zero_line.SetLineColor(ROOT.kBlack)
+    zero_line.SetLineWidth(1)
+    zero_line.SetLineStyle(ROOT.kDashed)
+    zero_line.Draw("SAME")
+
+    canv.cd(1)
+    CMS.cmsObjectDraw(leg)
+    CMS.UpdatePad(canv)
+
+    canv.SaveAs(f"{plotname}.pdf")
+    canv.SaveAs(f"{plotname}.png")
+    print(f"Created {plotname}.pdf / .png, copying to /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/overall-fit")
+    os.system("mv *.pdf /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/overall-fit")
+    os.system("mv *.png /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/overall-fit")
+
 
 for obs, nBins, xmin, xmax, xlabel, plotname in obs_configs:
     frame = obs.frame(RF.Bins(nBins), RF.Range(xmin, xmax), RF.Title(""))
@@ -217,12 +296,21 @@ for obs, nBins, xmin, xmax, xlabel, plotname in obs_configs:
                        RF.LineStyle(ROOT.kDashed),
                        RF.LineWidth(2))
 
-    # Background component
+    # Peaking-in-m(ll) background component
     model_2dpdf.plotOn(frame,
-                       RF.Components("bkgtot_mll_met_2dpdf"),
-                       RF.Name("background"),
+                       RF.Components("bkgpeaking_mll_met_2dpdf"),
+                       RF.Name("bkg_peaking"),
                        RF.Normalization(n_tot_val, ROOT.RooAbsReal.NumEvent),
-                       RF.LineColor(ROOT.TColor.GetColor("#5790fc")), # blue
+                       RF.LineColor(ROOT.TColor.GetColor("#964a8b")),
+                       RF.LineStyle(ROOT.kDashed),
+                       RF.LineWidth(2))
+
+    # Non-peaking-in-m(ll) background component
+    model_2dpdf.plotOn(frame,
+                       RF.Components("bkgnonpeak_mll_met_2dpdf"),
+                       RF.Name("bkg_nonpeak"),
+                       RF.Normalization(n_tot_val, ROOT.RooAbsReal.NumEvent),
+                       RF.LineColor(ROOT.TColor.GetColor("#3f90da")),
                        RF.LineStyle(ROOT.kDashed),
                        RF.LineWidth(2))
 
@@ -235,108 +323,11 @@ for obs, nBins, xmin, xmax, xlabel, plotname in obs_configs:
                        RF.MarkerStyle(ROOT.kFullCircle),
                        RF.MarkerSize(0.8))
 
-    # Pull histogram: (data - model) / sigma_data, bin-by-bin
-    pull_hist = frame.pullHist("data", "total")
-    pull_hist.SetMarkerStyle(ROOT.kFullCircle)
-    pull_hist.SetMarkerSize(0.8)
+    plot_kwargs = dict(obs=obs, nBins=nBins, xmin=xmin, xmax=xmax, xlabel=xlabel,
+                       plotname=plotname, n_sig=n_sig, n_bkg=n_bkg,
+                       n_peak_val=n_peak_val, n_peak_err=n_peak_err,
+                       n_nonpeak_val=n_nonpeak_val, n_nonpeak_err=n_nonpeak_err,
+                       ratio_val=ratio_val, ratio_err=ratio_err)
 
-    frame_pull = obs.frame(RF.Bins(nBins), RF.Range(xmin, xmax), RF.Title(""))
-    frame_pull.addPlotable(pull_hist, "P")
-
-    # Canvas split 70/30 between main and pull
-    c = ROOT.TCanvas(plotname, plotname, 800, 800)
-    pad_main = ROOT.TPad("pad_main", "", 0, 0.28, 1, 1.0)
-    pad_pull = ROOT.TPad("pad_pull", "", 0, 0.00, 1, 0.28)
-    pad_main.SetBottomMargin(0.02)
-    pad_main.SetLeftMargin(0.12)
-    pad_pull.SetTopMargin(0.04)
-    pad_pull.SetBottomMargin(0.35)
-    pad_pull.SetLeftMargin(0.12)
-    pad_main.Draw()
-    pad_pull.Draw()
-
-    pad_main.cd()
-    frame.GetXaxis().SetLabelSize(0)
-    frame.GetXaxis().SetTitleSize(0)
-    frame.GetYaxis().SetTitle("Events / bin")
-    frame.GetYaxis().SetTitleSize(0.055)
-    frame.GetYaxis().SetTitleOffset(1.0)
-    frame.SetMaximum(1.6 * frame.GetMaximum())
-    frame.Draw()
-
-    leg = ROOT.TLegend(0.25, 0.65, 0.90, 0.90)
-    leg.SetBorderSize(0)
-    leg.SetFillStyle(0)
-    leg.SetTextSize(0.042)
-    leg.AddEntry(frame.findObject("data"),       "MC (background only)", "PE")
-    leg.AddEntry(frame.findObject("total"),       "Total model", "L")
-    leg.AddEntry(frame.findObject("signal"),      f"Signal (650, 1) GeV (n_{{sig}} = {n_sig.getVal():.2f} +/- {n_sig.getError():.2f})", "L")
-    leg.AddEntry(frame.findObject("background"),  f"Background (n_{{bkg}} = {n_bkg.getVal():.2f} +/- {n_bkg.getError():.2f})", "L")
-    leg.Draw()
-
-    # CMS_lumi draws the CMS text and luminosity information on the pad: https://cmsstyle.readthedocs.io/en/latest/reference/#cmsstyle.cmsstyle.CMS_lumi
-    CMS.CMS_lumi(pad_main, iPosX=0)
-
-
-    # info = ROOT.TLatex()
-    # info.SetNDC()
-    # info.SetTextSize(0.038)
-    # info.DrawLatex(0.14, 0.88, f"Fit status: {fit_result.status()}   EDM: {fit_result.edm():.2e}")
-
-    pad_pull.cd()
-    frame_pull.GetYaxis().SetTitle("Pull")
-    frame_pull.GetYaxis().CenterTitle(True)
-    frame_pull.GetYaxis().SetNdivisions(5)
-    frame_pull.GetYaxis().SetTitleSize(0.13)
-    frame_pull.GetYaxis().SetTitleOffset(0.38)
-    frame_pull.GetYaxis().SetLabelSize(0.10)
-    frame_pull.GetXaxis().SetTitle(xlabel)
-    frame_pull.GetXaxis().SetTitleSize(0.14)
-    frame_pull.GetXaxis().SetTitleOffset(0.85)
-    frame_pull.GetXaxis().SetLabelSize(0.11)
-    frame_pull.SetMaximum(4.9)
-    frame_pull.SetMinimum(-4.9)
-    frame_pull.Draw()
-
-    zero_line = ROOT.TLine(xmin, 0, xmax, 0)
-    zero_line.SetLineColor(ROOT.kBlack)
-    zero_line.SetLineWidth(1)
-    zero_line.Draw("SAME")
-
-    c.SaveAs(f"{plotname}.pdf")
-    c.SaveAs(f"{plotname}.png")
-    print(f"Created {plotname}.pdf / .png, copying to /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/overall-fit")
-    os.system("mv *.pdf /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/overall-fit")
-    os.system("mv *.png /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/overall-fit")
-
-    # Log-scale version
-    logname = f"{plotname}_logscale"
-    c_log = ROOT.TCanvas(logname, logname, 800, 800)
-    pad_main_log = ROOT.TPad("pad_main_log", "", 0, 0.28, 1, 1.0)
-    pad_pull_log = ROOT.TPad("pad_pull_log", "", 0, 0.00, 1, 0.28)
-    pad_main_log.SetBottomMargin(0.02)
-    pad_main_log.SetLeftMargin(0.12)
-    pad_pull_log.SetTopMargin(0.04)
-    pad_pull_log.SetBottomMargin(0.35)
-    pad_pull_log.SetLeftMargin(0.12)
-    pad_main_log.Draw()
-    pad_pull_log.Draw()
-
-    pad_main_log.cd()
-    pad_main_log.SetLogy()
-    frame.GetYaxis().SetTitle("Events / bin")
-    frame.SetMaximum(frame.GetMaximum() * 1e6)
-    frame.SetMinimum(1e-10)
-    frame.Draw()
-    leg.Draw()
-    CMS.CMS_lumi(pad_main_log, iPosX=0)
-
-    pad_pull_log.cd()
-    frame_pull.Draw()
-    zero_line.Draw("SAME")
-
-    c_log.SaveAs(f"{logname}.pdf")
-    c_log.SaveAs(f"{logname}.png")
-    print(f"Created {logname}.pdf / .png, copying to /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/overall-fit")
-    os.system("mv *.pdf /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/overall-fit")
-    os.system("mv *.png /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/overall-fit")
+    make_plot(frame, doLog=False, **plot_kwargs)
+    make_plot(frame, doLog=True,  **plot_kwargs)
