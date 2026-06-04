@@ -66,7 +66,7 @@ def plotSignalFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname, nFl
 
     roo_curve = frame.getCurve("pdf_" + plotname)
     chi2_per_ndf = frame.chiSquare("pdf_" + plotname, "data_" + plotname, nFloatParams)
-    leg.SetHeader(f"2018 SR: (650, 1) GeV signal (#chi^{{2}}/ndf = {chi2_per_ndf:.2f})")
+    leg.SetHeader(f"2018 SR: (650, 1) GeV signal ( #chi^{{2}}/ndf = {chi2_per_ndf:.2f})")
     frame.Draw("SAME")
 
     # Ratio plot
@@ -316,7 +316,7 @@ for doLog in [True, False]:
                   doLog=doLog)
     plotSignalFit("m(ll)", mll, sigdataset, sig_dcb_mll,
                   "Signal MC",
-                  f"DCB fit (#mu={mean_mll.getVal():.1f}#pm{mean_mll.getError():.1f}, #sigma_L={sigmal_mll.getVal():.1f}#pm{sigmal_mll.getError():.1f})",
+                  f"DCB fit (#mu={mean_mll.getVal():.1f}#pm{mean_mll.getError():.1f}, #sigma={sigmal_mll.getVal():.1f}#pm{sigmal_mll.getError():.1f})",
                   "sig_mll_dcb",
                   nFloatParams=7,
                   doLog=doLog)
