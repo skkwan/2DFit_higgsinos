@@ -120,9 +120,10 @@ def plotFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname,
 
     fname = plotname + ("-log" if doLog else "")
     # ROOT's TPDF backend clips text in sub-pad top margins; use EPS→PDF instead.
-    # -dEPSCrop trims the PDF page to the EPS BoundingBox, avoiding ps2pdf whitespace.
+    # epstopdf preserves the Symbol font encoding (ps2pdf re-encodes it, breaking #mu etc.)
     canv.SaveAs(f"{fname}.eps")
-    os.system(f"ps2pdf -dEPSCrop {fname}.eps {fname}.pdf && rm {fname}.eps")
+    os.system(f"gs -q -dBATCH -dNOPAUSE -dSAFER -dEPSCrop -sDEVICE=pdfwrite -dEmbedAllFonts=true -dSubsetFonts=true -sOutputFile={fname}.pdf {fname}.eps && rm {fname}.eps")
+
     ROOT.gStyle.SetImageScaling(3.)
     canv.SaveAs(f"{fname}.png")
     ROOT.gStyle.SetImageScaling(1.)
@@ -282,7 +283,7 @@ def plotInputHistogram(name, rooVar, dataset, label, plotname, color,
 
     fname = "input_" + plotname + ("-log" if doLog else "")
     canv.SaveAs(f"{fname}.eps")
-    os.system(f"ps2pdf -dEPSCrop {fname}.eps {fname}.pdf && rm {fname}.eps")
+    os.system(f"epstopdf --crop --outfile={fname}.pdf {fname}.eps && rm {fname}.eps")
     ROOT.gStyle.SetImageScaling(3.)
     canv.SaveAs(f"{fname}.png")
     ROOT.gStyle.SetImageScaling(1.)
@@ -469,3 +470,4 @@ for doLog in [True, False]:
 
 os.system("mv *.png /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/background_shapes")
 os.system("mv *.pdf /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/background_shapes")
+os.system("rm *.eps")
