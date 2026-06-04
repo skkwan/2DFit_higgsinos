@@ -19,7 +19,8 @@ def plotSignalFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname, nFl
     frame = rooVar.frame(nBins)
 
     leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 4, 0.9, 0.89, textSize=0.04)
-    CMS.SetLumi("")
+    CMS.SetLumi(250, unit="fb", run="2018")
+
 
     data_hist = dataset.createHistogram("histo_" + plotname + scale_suffix, rooVar, ROOT.RooFit.Binning(nBins, xmin, xmax))
     if getOverflow:
@@ -38,7 +39,7 @@ def plotSignalFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname, nFl
                            nameXaxis=f"{name} / GeV",
                            nameYaxis="Shape (A.U.)",
                            nameRatio="MC/Pred",
-                           square=CMS.kSquare, iPos=0)
+                           square=True, iPos=0)
     canv.SetRightMargin(0.05)
     CMS.UpdatePad(canv)
 
@@ -149,39 +150,39 @@ def make_knot_x(
     Construct and return knots for a range of values (x_min, x_max). "Power" determines the spacing of the bins. Default value is 1.0 (linear).
     If "centers" is provided, snap the knots to the nearest bin.
     """
-        n_knots = int(max(2, n_knots))
-        x_min = float(x_min)
-        x_max = float(x_max)
+    n_knots = int(max(2, n_knots))
+    x_min = float(x_min)
+    x_max = float(x_max)
 
-        # Guard against x_min <= 0
-        xmin_eff = max(x_min, 1e-3)
-        #knot_x = np.exp(np.linspace(np.log(xmin_eff), np.log(x_max), n_knots))
+    # Guard against x_min <= 0
+    xmin_eff = max(x_min, 1e-3)
+    #knot_x = np.exp(np.linspace(np.log(xmin_eff), np.log(x_max), n_knots))
 
-        t = np.linspace(0.0, 1.0, n_knots)
-        knot_x = x_min + (x_max - x_min) * (t**power)
+    t = np.linspace(0.0, 1.0, n_knots)
+    knot_x = x_min + (x_max - x_min) * (t**power)
 
-        # Optional: snap to nearest bin center to avoid "between-bin" weirdness
-        if centers is not None and len(centers) > 0:
-            knot_x = np.array([centers[np.argmin(np.abs(centers - xx))] for xx in knot_x], dtype=float)
+    # Optional: snap to nearest bin center to avoid "between-bin" weirdness
+    if centers is not None and len(centers) > 0:
+        knot_x = np.array([centers[np.argmin(np.abs(centers - xx))] for xx in knot_x], dtype=float)
 
-        # Optional: enforce minimum spacing (in bins) to avoid duplicates after snapping
-        if centers is not None and min_dx_bins is not None and min_dx_bins > 0:
-            # approximate bin width from centers
-            if len(centers) > 1:
-                bw = float(np.median(np.diff(centers)))
-            else:
-                bw = 1.0
-            min_dx = min_dx_bins * bw
+    # Optional: enforce minimum spacing (in bins) to avoid duplicates after snapping
+    if centers is not None and min_dx_bins is not None and min_dx_bins > 0:
+        # approximate bin width from centers
+        if len(centers) > 1:
+            bw = float(np.median(np.diff(centers)))
+        else:
+            bw = 1.0
+        min_dx = min_dx_bins * bw
 
-            filtered = [knot_x[0]]
-            for xx in knot_x[1:]:
-                if xx - filtered[-1] >= min_dx:
-                    filtered.append(xx)
-            if filtered[-1] != knot_x[-1]:
-                filtered.append(knot_x[-1])
-            knot_x = np.array(filtered, dtype=float)
+        filtered = [knot_x[0]]
+        for xx in knot_x[1:]:
+            if xx - filtered[-1] >= min_dx:
+                filtered.append(xx)
+        if filtered[-1] != knot_x[-1]:
+            filtered.append(knot_x[-1])
+        knot_x = np.array(filtered, dtype=float)
 
-        return knot_x
+    return knot_x
 
 ##################################################
 ##### Define fit observables 
