@@ -19,6 +19,8 @@ def plotSignalFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname, nFl
     frame = rooVar.frame(nBins)
 
     leg = CMS.cmsLeg(0.3, 0.89 - 0.05 * 4, 0.9, 0.89, textSize=0.04)
+    CMS.SetExtraText("Private work")
+    CMS.SetCmsText("CMS", font=62, size=0.76)
     CMS.SetLumi(250, unit="fb", run="2018")
 
 
@@ -66,7 +68,7 @@ def plotSignalFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname, nFl
 
     roo_curve = frame.getCurve("pdf_" + plotname)
     chi2_per_ndf = frame.chiSquare("pdf_" + plotname, "data_" + plotname, nFloatParams)
-    leg.SetHeader(f"2018 SR: (650, 1) GeV signal ( #chi^{{2}}/ndf = {chi2_per_ndf:.2f})")
+    leg.SetHeader(f"2018 SR: (650, 1) GeV signal:   #chi^{{2}}/ndf = {chi2_per_ndf:.2f}")
     frame.Draw("SAME")
 
     # Ratio plot
@@ -91,8 +93,12 @@ def plotSignalFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname, nFl
     CMS.UpdatePad(canv)
 
     fname = plotname + ("-log" if doLog else "")
-    canv.SaveAs(f"{fname}.pdf")
+    canv.SaveAs(f"{fname}.eps")
+    os.system(f"gs -q -dBATCH -dNOPAUSE -dSAFER -dEPSCrop -dPDFSETTINGS=/prepress -sDEVICE=pdfwrite -dEmbedAllFonts=true -dSubsetFonts=true -sOutputFile={fname}.pdf {fname}.eps && rm {fname}.eps")
+
+    ROOT.gStyle.SetImageScaling(3.)
     canv.SaveAs(f"{fname}.png")
+    ROOT.gStyle.SetImageScaling(1.)
     if outdir:
         os.system(f"mv {fname}.* {outdir}")
 
@@ -316,7 +322,7 @@ for doLog in [True, False]:
                   doLog=doLog)
     plotSignalFit("m(ll)", mll, sigdataset, sig_dcb_mll,
                   "Signal MC",
-                  f"DCB fit (#mu={mean_mll.getVal():.1f}#pm{mean_mll.getError():.1f}, #sigma={sigmal_mll.getVal():.1f}#pm{sigmal_mll.getError():.1f})",
+                  "DCB fit (#mu={mean_mll.getVal():.1f}#pm{mean_mll.getError():.1f}, #sigma={sigmal_mll.getVal():.1f}#pm{sigmal_mll.getError():.1f})",
                   "sig_mll_dcb",
                   nFloatParams=7,
                   doLog=doLog)

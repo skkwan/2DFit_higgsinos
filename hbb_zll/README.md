@@ -14,7 +14,7 @@ Output plots are in [https://skkwan.web.cern.ch/higgsino/studies/mll-MET-fit-2D/
 2. **Get remaining background MET shapes (peaking and non-peaking MET shape, non-peaking m(ll) shape)**: We obtain the remaining three background PDFs with:
 ```bash
 # from the main directory
-cd pdf_fit/
+cd individual_pdf_fits/
 python3 reformat.py # creates backgrounds_peaking.root and backgrounds_nonpeak.root
 python3 obtain_background_components.py # creates fitresult_background_all_except_ZPeak.root
 ```
@@ -23,7 +23,7 @@ Output plots are in [https://skkwan.web.cern.ch/higgsino/studies/mll-MET-fit-2D/
 3. **Get signal PDFs**:
 ```bash
 # from the main directory
-cd pdf_fit/
+cd individual_pdf_fits/
 python3 obtain_signal_components.py # creates fitresult_signal.root
 ```
 
@@ -33,7 +33,7 @@ Perform the 2D fit to background (using the Z-peak as the real mll component of 
 
 ```bash
 # back in the main directory
-cd pdf_fit
+cd overall_fit/
 python3 reformat.py # prepare the input files: creates backgrounds_for_2D_fit.root and snapshot_TChiZH_650_1_SR_mll_MET_fit_scheme.root
 python3 py_2d_fit_withZPeakFixed.py # creates fitresult.root
 python3 plot1DProjection.py # plots the fit result and fit inputs 

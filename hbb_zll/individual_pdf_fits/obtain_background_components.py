@@ -84,8 +84,7 @@ def plotFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname,
     leg.SetHeader(f"2018 SR: background MET ( #chi^{{2}}/ndf = {chi2_per_ndf:.2f})")
     frame.Draw("SAME")
 
-    # Ratio panel: use the same binning as chi^2 so numerator and denominator
-    # are on identical scales (avoids normalization mismatch from mixed bin widths).
+    # Ratio panel
     canv.cd(2)
     if varBinEdges is not None:
         data_ratio = dataset.createHistogram("histo_ratio_" + plotname, rooVar,
@@ -119,10 +118,10 @@ def plotFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname,
     CMS.UpdatePad(canv)
 
     fname = plotname + ("-log" if doLog else "")
-    # ROOT's TPDF backend clips text in sub-pad top margins; use EPS→PDF instead.
-    # epstopdf preserves the Symbol font encoding (ps2pdf re-encodes it, breaking #mu etc.)
+
+    # Workaround for "CMS Preliminary" being constantly cut off
     canv.SaveAs(f"{fname}.eps")
-    os.system(f"gs -q -dBATCH -dNOPAUSE -dSAFER -dEPSCrop -sDEVICE=pdfwrite -dEmbedAllFonts=true -dSubsetFonts=true -sOutputFile={fname}.pdf {fname}.eps && rm {fname}.eps")
+    os.system(f"gs -q -dBATCH -dNOPAUSE -dSAFER -dEPSCrop -dPDFSETTINGS=/prepress -sDEVICE=pdfwrite -dEmbedAllFonts=true -dSubsetFonts=true -sOutputFile={fname}.pdf {fname}.eps && rm {fname}.eps")
 
     ROOT.gStyle.SetImageScaling(3.)
     canv.SaveAs(f"{fname}.png")
@@ -148,14 +147,14 @@ def plotMETPDFTogether(rooVar, peaking_dataset, nonpeak_dataset,
                            ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#5790fc")),
                            ROOT.RooFit.LineWidth(2),
                            ROOT.RooFit.MarkerColor(ROOT.TColor.GetColor("#5790fc")),
-                           ROOT.RooFit.MarkerSize(1),
+                           ROOT.RooFit.MarkerSize(0.5),
                            ROOT.RooFit.Binning(nBins))
 
     nonpeak_dataset.plotOn(frame, ROOT.RooFit.Name("nonpeak_data_" + plotname),
                            ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#964a8b")),
                            ROOT.RooFit.LineWidth(2),
                            ROOT.RooFit.MarkerColor(ROOT.TColor.GetColor("#964a8b")),
-                           ROOT.RooFit.MarkerSize(1),
+                           ROOT.RooFit.MarkerSize(0.5),
                            ROOT.RooFit.Binning(nBins))
 
     peaking_pdf.plotOn(frame, ROOT.RooFit.Name("peaking_pdf_" + plotname),
@@ -189,7 +188,8 @@ def plotMETPDFTogether(rooVar, peaking_dataset, nonpeak_dataset,
     canv.SetRightMargin(0.05)
     CMS.UpdatePad(canv)
 
-    canv.cd(1)
+    pad1 = canv.cd(1)
+    pad1.SetTopMargin(0.15)
     if doLog:
         ROOT.gPad.SetLogy()
     CMS.UpdatePad(canv)
@@ -239,7 +239,7 @@ def plotInputHistogram(name, rooVar, dataset, label, plotname, color,
     h.SetLineColor(ROOT.TColor.GetColor(color))
     h.SetMarkerColor(ROOT.TColor.GetColor(color))
     h.SetMarkerStyle(ROOT.kFullCircle)
-    h.SetMarkerSize(1)
+    h.SetMarkerSize(0.2)
     h.SetLineWidth(2)
 
     y_min = 0
@@ -283,7 +283,8 @@ def plotInputHistogram(name, rooVar, dataset, label, plotname, color,
 
     fname = "input_" + plotname + ("-log" if doLog else "")
     canv.SaveAs(f"{fname}.eps")
-    os.system(f"epstopdf --crop --outfile={fname}.pdf {fname}.eps && rm {fname}.eps")
+    os.system(f"gs -q -dBATCH -dNOPAUSE -dSAFER -dEPSCrop -dPDFSETTINGS=/prepress -sDEVICE=pdfwrite -dEmbedAllFonts=true -dSubsetFonts=true -sOutputFile={fname}.pdf {fname}.eps && rm {fname}.eps")
+
     ROOT.gStyle.SetImageScaling(3.)
     canv.SaveAs(f"{fname}.png")
     ROOT.gStyle.SetImageScaling(1.)
@@ -362,9 +363,9 @@ def plotMETPDFsOnly(rooVar, peaking_pdf, nonpeak_pdf, plotname, outdir="", getOv
 
 
 ##################################################
-##### Variable bin edges for MET chi^2
+##### Variable bin boundaries for MET chi^2
 ##################################################
-met_var_bins = [200, 220, 240, 260, 280, 300, 320, 340, 360, 380, 400, 480, 600, 1200]
+met_var_bins = [200, 220, 240, 260, 280, 300, 320, 340, 360, 380, 400, 500, 800, 1200]
 
 ROOT.gStyle.SetImageScaling(1.)  # set to 3 only immediately before PNG saves
 
@@ -470,4 +471,4 @@ for doLog in [True, False]:
 
 os.system("mv *.png /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/background_shapes")
 os.system("mv *.pdf /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/background_shapes")
-os.system("rm *.eps")
+
