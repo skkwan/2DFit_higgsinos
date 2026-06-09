@@ -33,7 +33,7 @@ Perform the 2D fit to background (using the Z-peak as the real mll component of 
 
 ```bash
 # back in the main directory
-cd overall_fit/
+cd two_dimensional_pdf_fit/
 python3 reformat.py # prepare the input files: creates backgrounds_for_2D_fit.root and snapshot_TChiZH_650_1_SR_mll_MET_fit_scheme.root
 python3 py_2d_fit_withZPeakFixed.py # creates fitresult.root
 python3 plot1DProjection.py # plots the fit result and fit inputs 
