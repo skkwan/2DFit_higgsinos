@@ -49,9 +49,31 @@ def plotFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname,
     roo_curve = frame.getCurve("pdf_" + plotname)
     chi2_per_ndf = frame.chiSquare("pdf_" + plotname, "data_" + plotname, nFloatParams)
 
-    # Derive y_max from the frame's actual maximum so the full curve is visible.
+    # Rescale to events/GeV: divide data by actual bin width and PDF by frame
+    # reference bin width so both are on the same density axis.
+    # Must happen after chi2 (which reads unscaled values) and before y_max.
+    w_ref = (xmax - xmin) / nBinsDisplay
+    roo_hist = frame.getHist("data_" + plotname)
+    xs, ys = roo_hist.GetX(), roo_hist.GetY()
+    ey_lo, ey_hi = roo_hist.GetEYlow(), roo_hist.GetEYhigh()
+    for i in range(roo_hist.GetN()):
+        if varBinEdges is not None:
+            w_i = next(
+                varBinEdges[j+1] - varBinEdges[j]
+                for j in range(len(varBinEdges) - 1)
+                if varBinEdges[j] <= xs[i] <= varBinEdges[j+1]
+            )
+        else:
+            w_i = w_ref
+        roo_hist.SetPoint(i, xs[i], ys[i] / w_i)
+        roo_hist.SetPointEYlow(i, ey_lo[i] / w_i)
+        roo_hist.SetPointEYhigh(i, ey_hi[i] / w_i)
+    for i in range(roo_curve.GetN()):
+        roo_curve.SetPoint(i, roo_curve.GetX()[i], roo_curve.GetY()[i] / w_ref)
+    y_max = 1.5 * max(roo_hist.GetY()[i] + roo_hist.GetEYhigh()[i]
+                      for i in range(roo_hist.GetN()))
+
     y_min = 0
-    y_max = 1.5 * frame.GetMaximum()
     if doLog:
         y_min = 1e-10
         y_max = y_max * 1000
@@ -65,7 +87,7 @@ def plotFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname,
     canv = CMS.cmsDiCanvas("canv_" + plotname, x_min=xmin, x_max=xmax, y_min=y_min, y_max=y_max,
                            r_min=0, r_max=2,
                            nameXaxis=f"{name} / GeV",
-                           nameYaxis="Shape (A.U.)",
+                           nameYaxis="Events / GeV",
                            nameRatio="MC/Pred",
                            square=True, iPos=0)
     canv.SetRightMargin(0.05)
@@ -103,7 +125,7 @@ def plotFit(name, rooVar, dataset, pdf, dataLabel, fitLabel, plotname,
         data_ratio = data_hist.Clone()
         prediction = data_hist.Clone()
         for i in range(1, data_ratio.GetNbinsX() + 1):
-            prediction.SetBinContent(i, roo_curve.Eval(data_ratio.GetBinCenter(i)))
+            prediction.SetBinContent(i, roo_curve.Eval(data_ratio.GetBinCenter(i)) * w_ref)
         data_ratio.Divide(prediction)
     data_ratio.SetMarkerColor(ROOT.kBlack)
     data_ratio.SetLineColor(ROOT.kBlack)
@@ -378,8 +400,8 @@ met = ROOT.RooRealVar("met", "met", 200, 1200)
 ##################################################
 ###### Retrieve background dataset (prepared with reformat.py)
 ##################################################
-bkg_peaking_filepath = 'backgrounds_peaking.root'
-bkg_nonpeak_filepath = 'backgrounds_nonpeak.root'
+bkg_peaking_filepath = '../input_data/backgrounds_peaking.root'
+bkg_nonpeak_filepath = '../input_data/backgrounds_nonpeak.root'
 bkg_peaking_file = ROOT.TFile.Open(bkg_peaking_filepath, "READ")
 bkg_nonpeak_file = ROOT.TFile.Open(bkg_nonpeak_filepath, "READ")
 
@@ -425,7 +447,8 @@ bkg_peaking_result_met = bkgpeaking_met.fitTo(bkg_peaking_dataset_met, RF.Save()
 bkg_peaking_params_met = bkgpeaking_met.getParameters(bkg_peaking_dataset_met)
 
 
-f = ROOT.TFile("fitresult_background_all_except_ZPeak.root", "RECREATE")
+os.makedirs("individual_fit_results", exist_ok=True)
+f = ROOT.TFile("individual_fit_results/fitresult_background_all_except_ZPeak.root", "RECREATE")
 bkg_nonpeak_result_met.Write("bkg_nonpeak_result_met")
 bkg_nonpeak_result_mll.Write("bkg_nonpeak_result_mll")
 bkg_peaking_result_met.Write("bkg_peaking_result_met")

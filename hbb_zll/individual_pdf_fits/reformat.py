@@ -4,11 +4,20 @@ import os
 import ROOT
 
 parser = argparse.ArgumentParser(description="Hadd ntuples for 2D fit")
-parser.add_argument("-m", "--mode", required=True, choices=["background", "signal"],
-                    help="'background' to hadd bkg ntuples, 'signal' to hadd all signal mass points")
+parser.add_argument("-m", "--mode", required=True, choices=["bkg", "sig", "all"],
+                    help="'bkg' to hadd bkg ntuples, 'sig' to hadd signal mass points, 'all' to do both")
+parser.add_argument("--mass-points", nargs="+", default=["650,1", "500,375"],
+                    metavar="M1,M2",
+                    help="Signal mass points to process as 'mchi,mlsp' pairs (e.g. 650,1 500,350)")
 args = parser.parse_args()
 
-basedir = "/eos/cms/store/group/phys_susy/skkwan/condorHistogramming/2026-02-25-00h42m-2018-dataMC-with-SR-ntuples"
+mass_points = [tuple(int(x) for x in mp.split(",")) for mp in args.mass_points]
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+input_data_dir = os.path.join(script_dir, "..", "input_data")
+os.makedirs(input_data_dir, exist_ok=True)
+
+basedir ="/eos/cms/store/group/phys_susy/skkwan/condorHistogramming/2026-02-25-00h42m-2018-dataMC-with-SR-ntuples"
 signal_basedir = "/eos/cms/store/group/phys_susy/skkwan/condorHistogramming/2026-06-06-00h18m-2018-sample-signal-points"
 
 tree_name = "event_tree"
@@ -84,6 +93,17 @@ def count_yield(class_list):
     return total
 
 
+def hadd_signal_plus_background(m1, m2):
+    """Hadd signal and background ntuples into ../input_data/signal_plus_backgrounds_{m1}_{m2}.root."""
+    signal_file = f"{input_data_dir}/snapshot_TChiZH_{m1}_{m2}_SR_mll_MET_fit_scheme.root"
+    out_file = f"{input_data_dir}/signal_plus_backgrounds_{m1}_{m2}.root"
+    cmd = (f"hadd -f -j -k {out_file} {signal_file}"
+           f" {input_data_dir}/backgrounds_peaking.root"
+           f" {input_data_dir}/backgrounds_nonpeak.root")
+    print(cmd)
+    os.system(cmd)
+
+
 def harmonize_weight(in_file, channel):
     """Define weight_nominal from weight_nominal_{channel} and snapshot to a _fixed.root file."""
     out_file = in_file.replace(".root", "_fixed.root")
@@ -93,7 +113,7 @@ def harmonize_weight(in_file, channel):
     return out_file
 
 
-if args.mode == "background":
+if args.mode in ("bkg", "all"):
     # peaking_yield = count_yield(["DYJets", "TTZ_peak"])
     # nonpeaking_yield = count_yield(["WJets", "ttbar", "TTZ_nonpeak", "TTW", "WH", "ZH", "WZ", "WW", "ZZ"])
     # frac = (peaking_yield)/(peaking_yield + nonpeaking_yield)
@@ -152,18 +172,21 @@ if args.mode == "background":
     harmonize_weight(f"{basedir}/backgrounds_peaking_mm.root", "mm")
     harmonize_weight(f"{basedir}/backgrounds_peaking_ee.root", "ee")
 
-    hadd_combined = f"hadd -f -j -k backgrounds_peaking.root {basedir}/backgrounds_peaking_mm_fixed.root {basedir}/backgrounds_peaking_ee_fixed.root"
+    hadd_combined = f"hadd -f -j -k {input_data_dir}/backgrounds_peaking.root {basedir}/backgrounds_peaking_mm_fixed.root {basedir}/backgrounds_peaking_ee_fixed.root"
     print(hadd_combined)
     os.system(hadd_combined)
     for f in [f"{basedir}/backgrounds_peaking_mm.root", f"{basedir}/backgrounds_peaking_ee.root",
               f"{basedir}/backgrounds_peaking_mm_fixed.root", f"{basedir}/backgrounds_peaking_ee_fixed.root"]:
         os.remove(f)
 
+    hadd_total = f"hadd -f -j -k {input_data_dir}/backgrounds_total.root {input_data_dir}/backgrounds_peaking.root {input_data_dir}/backgrounds_nonpeak.root"
+    os.system(hadd_total)
+
     # Harmonize weight branch name
     harmonize_weight(f"{basedir}/backgrounds_nonpeak_mm.root", "mm")
     harmonize_weight(f"{basedir}/backgrounds_nonpeak_ee.root", "ee")
 
-    hadd_combined = f"hadd -f -j -k backgrounds_nonpeak.root {basedir}/backgrounds_nonpeak_mm_fixed.root {basedir}/backgrounds_nonpeak_ee_fixed.root"
+    hadd_combined = f"hadd -f -j -k {input_data_dir}/backgrounds_nonpeak.root {basedir}/backgrounds_nonpeak_mm_fixed.root {basedir}/backgrounds_nonpeak_ee_fixed.root"
     print(hadd_combined)
     os.system(hadd_combined)
     for f in [f"{basedir}/backgrounds_nonpeak_mm.root", f"{basedir}/backgrounds_nonpeak_ee.root",
@@ -211,11 +234,11 @@ if args.mode == "background":
     # print(hadd_combined)
     # os.system(hadd_combined)
 
-elif args.mode == "signal":
-    #### SIGNAL: hadd all mass points found in signal_basedir
-    mass_point_dirs = sorted(glob.glob(f"{signal_basedir}/TChiZH_*"))
-    for mp_dir in mass_point_dirs:
-        mp_name = os.path.basename(mp_dir)  # e.g. TChiZH_650_1
+if args.mode in ("sig", "all"):
+    #### SIGNAL: hadd specified mass points
+    for m1, m2 in mass_points:
+        mp_name = f"TChiZH_{m1}_{m2}"
+        mp_dir = f"{signal_basedir}/{mp_name}"
         mm_files = sorted(glob.glob(f"{mp_dir}/snapshot_{mp_name}_*mm_SR_mll_MET_fit_scheme.root"))
         ee_files = sorted(glob.glob(f"{mp_dir}/snapshot_{mp_name}_*ee_SR_mll_MET_fit_scheme.root"))
         if not mm_files and not ee_files:
@@ -232,7 +255,9 @@ elif args.mode == "signal":
             os.system(f"hadd -f -j -k {ee_merged} " + " ".join(ee_files))
             fixed_files.append(harmonize_weight(ee_merged, "ee"))
 
-        out_file = f"{signal_basedir}/snapshot_{mp_name}_SR_mll_MET_fit_scheme.root"
+        out_file = f"{input_data_dir}/snapshot_{mp_name}_SR_mll_MET_fit_scheme.root"
         os.system(f"hadd -f -j -k {out_file} " + " ".join(fixed_files))
         for f in ([mm_merged] if mm_files else []) + ([ee_merged] if ee_files else []) + fixed_files:
             os.remove(f)
+
+        hadd_signal_plus_background(m1, m2)

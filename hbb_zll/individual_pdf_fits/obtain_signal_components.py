@@ -200,15 +200,8 @@ met = ROOT.RooRealVar("met", "met", 200, 1200)
 
 signal_basedir = "/eos/cms/store/group/phys_susy/skkwan/condorHistogramming/2026-06-06-00h18m-2018-sample-signal-points"
 
-##################################################
-###### Retrieve background dataset (prepared with reformat.py)
-##################################################
-bkgfilepath = 'backgrounds_for_2D_fit.root'
-bkgfile = ROOT.TFile.Open(bkgfilepath, "READ")
-bkgtree = bkgfile.Get("event_tree")
 weightXyear = ROOT.RooRealVar("weight_nominal", "weight_nominal", -1, 1)
 variables = ROOT.RooArgSet(mll, met, weightXyear)
-bkgdataset = ROOT.RooDataSet("bkgdataset", "bkgdataset", variables, ROOT.RooFit.Import(bkgtree), ROOT.RooFit.WeightVar(weightXyear))
 
 ###########################################################################
 # fit_signal: build and run the 2D signal fit for a single mass point
@@ -318,7 +311,8 @@ def fit_signal(m1, m2):
     w.Import(sig_roohistpdf_met)
     w.Import(pdf_of_spline)
 
-    f = ROOT.TFile(f"fitresult_signal_{tag}.root", "RECREATE")
+    os.makedirs("individual_fit_results", exist_ok=True)
+    f = ROOT.TFile(f"individual_fit_results/fitresult_signal_{tag}.root", "RECREATE")
     sig_result.Write("sig_result")
     w.Write()
     f.Close()
