@@ -1,4 +1,6 @@
 import ROOT
+import cmsstyle as CMS
+import os
 from uncertainties import ufloat
 
 def get_signal_model(m1=650, m2=1):
@@ -166,17 +168,168 @@ def do_combined_fit(model, toys):
     print(f"EDM:        {result.edm():.3e}")
     return result
 
+def make_toy_plot(frame, obs, nBins, xmin, xmax, xlabel, plotname, doLog,
+                  n_sig, n_bkg, n_peak_val, n_peak_err, n_nonpeak_val, n_nonpeak_err,
+                  ratio_val, mass_point, eos_dir="."):
+    if doLog:
+        plotname = f"{plotname}_logscale"
+        y_min = 1e-6
+        y_max = frame.GetMaximum() * 1e10
+        frame.SetMinimum(y_min)
+        frame.SetMaximum(y_max)
+    else:
+        y_min = 0
+        y_max = 2.2 * frame.GetMaximum()
+
+    pull_hist = frame.pullHist("data", "total")
+    pull_hist.SetMarkerStyle(ROOT.kFullCircle)
+    pull_hist.SetMarkerSize(0.8)
+
+    frame_pull = obs.frame(ROOT.RooFit.Bins(nBins), ROOT.RooFit.Range(xmin, xmax), ROOT.RooFit.Title(""))
+    frame_pull.addPlotable(pull_hist, "P")
+
+    CMS.SetExtraText("Private work")
+    CMS.SetCmsText("CMS", font=62, size=0.76)
+    CMS.SetLumi(250, unit="fb", run="2018")
+
+    canv = CMS.cmsDiCanvas("canv_" + plotname, x_min=xmin, x_max=xmax, y_min=y_min, y_max=y_max,
+                           r_min=-2, r_max=2,
+                           nameXaxis=f"{xlabel}",
+                           nameYaxis="Events",
+                           nameRatio="Pull",
+                           square=True, extraSpace=0.01, iPos=0.)
+    canv.SetRightMargin(0.05)
+    CMS.UpdatePad(canv)
+
+    canv.cd(1)
+    if doLog:
+        ROOT.gPad.SetLogy()
+
+    m1, m2 = mass_point
+    leg = ROOT.TLegend(0.25, 0.50, 0.90, 0.90)
+    leg.SetBorderSize(0)
+    leg.SetFillStyle(0)
+    leg.SetTextSize(0.035)
+    leg.AddEntry(frame.findObject("data"),        "Toy data", "PE")
+    leg.AddEntry(frame.findObject("total"),       "Total model", "L")
+    leg.AddEntry(frame.findObject("signal"),      f"Signal ({m1}, {m2}) GeV (n_{{sig}} = {n_sig.getVal():.2f} +/- {n_sig.getError():.2f})", "L")
+    leg.AddEntry(frame.findObject("bkg_peaking"), f"Peaking background (n_{{peak}} = {n_peak_val:.2f} +/- {n_peak_err:.2f})", "L")
+    leg.AddEntry(frame.findObject("bkg_nonpeak"), f"Non-peaking background (n_{{nonpeak}} = {n_nonpeak_val:.2f} +/- {n_nonpeak_err:.2f})", "L")
+    r_dummy = ROOT.TLine()
+    r_dummy.SetLineWidth(0)
+    r_dummy.SetLineColor(0)
+    leg.AddEntry(r_dummy, f"n_{{bkg}} = {n_bkg.getVal():.2f} +/- {n_bkg.getError():.2f}", "L")
+    leg.AddEntry(r_dummy, f"Ratio r (peaking / total) = {ratio_val:.3f} (fixed)", "L")
+
+    frame.Draw("SAME")
+
+    canv.cd(2)
+    frame_pull.Draw("SAME")
+    zero_line = ROOT.TLine(xmin, 0, xmax, 0)
+    zero_line.SetLineColor(ROOT.kBlack)
+    zero_line.SetLineWidth(1)
+    zero_line.SetLineStyle(ROOT.kDashed)
+    zero_line.Draw("SAME")
+
+    canv.cd(1)
+    CMS.cmsObjectDraw(leg)
+    CMS.UpdatePad(canv)
+
+    canv.SaveAs(f"{plotname}.pdf")
+    canv.SaveAs(f"{plotname}.png")
+    print(f"Created {plotname}.pdf / .png")
+    if eos_dir != ".":
+        os.system(f"mv {plotname}.pdf {eos_dir}/")
+        os.system(f"mv {plotname}.png {eos_dir}/")
+
+
+def plot_toy_fit(toys, model, result, met, mll, mass_point, r=0.088,
+                 plotname_prefix="toy_fit", eos_dir="."):
+    """
+    Plot 1D projections of the toy dataset with the best-fit model overlaid,
+    in the same style as fit2D.py.
+    """
+    n_sig = result.floatParsFinal().find("n_sig")
+    n_bkg = result.floatParsFinal().find("n_bkg")
+
+    n_sig_val     = n_sig.getVal()
+    n_bkg_val     = n_bkg.getVal()
+    n_bkg_err     = n_bkg.getError()
+    n_tot_val     = n_sig_val + n_bkg_val
+    n_peak_val    = n_bkg_val * r
+    n_nonpeak_val = n_bkg_val * (1 - r)
+    n_peak_err    = n_bkg_err * r
+    n_nonpeak_err = n_bkg_err * (1 - r)
+
+    obs_configs = [
+        (mll, 40,  60.,  120., "m(ll) [GeV]", f"mll_{plotname_prefix}"),
+        (met, 60, 200., 1200., "MET [GeV]",   f"met_{plotname_prefix}"),
+    ]
+
+    for obs, nBins, xmin, xmax, xlabel, plotname in obs_configs:
+        frame = obs.frame(ROOT.RooFit.Bins(nBins), ROOT.RooFit.Range(xmin, xmax), ROOT.RooFit.Title(""))
+
+        model.plotOn(frame,
+                     ROOT.RooFit.Name("total"),
+                     ROOT.RooFit.Normalization(n_tot_val, ROOT.RooAbsReal.NumEvent),
+                     ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#9c9ca1")),
+                     ROOT.RooFit.LineWidth(2))
+
+        model.plotOn(frame,
+                     ROOT.RooFit.Components("sigtot_mll_met_2dpdf"),
+                     ROOT.RooFit.Name("signal"),
+                     ROOT.RooFit.Normalization(n_tot_val, ROOT.RooAbsReal.NumEvent),
+                     ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#bd1f01")),
+                     ROOT.RooFit.LineStyle(ROOT.kDashed),
+                     ROOT.RooFit.LineWidth(2))
+
+        model.plotOn(frame,
+                     ROOT.RooFit.Components("bkgpeaking_mll_met_2dpdf"),
+                     ROOT.RooFit.Name("bkg_peaking"),
+                     ROOT.RooFit.Normalization(n_tot_val, ROOT.RooAbsReal.NumEvent),
+                     ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#964a8b")),
+                     ROOT.RooFit.LineStyle(ROOT.kDashed),
+                     ROOT.RooFit.LineWidth(2))
+
+        model.plotOn(frame,
+                     ROOT.RooFit.Components("bkgnonpeak_mll_met_2dpdf"),
+                     ROOT.RooFit.Name("bkg_nonpeak"),
+                     ROOT.RooFit.Normalization(n_tot_val, ROOT.RooAbsReal.NumEvent),
+                     ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#3f90da")),
+                     ROOT.RooFit.LineStyle(ROOT.kDashed),
+                     ROOT.RooFit.LineWidth(2))
+
+        toys.plotOn(frame,
+                    ROOT.RooFit.Binning(nBins),
+                    ROOT.RooFit.Name("data"),
+                    ROOT.RooFit.MarkerColor(ROOT.kBlack),
+                    ROOT.RooFit.LineColor(ROOT.kBlack),
+                    ROOT.RooFit.MarkerStyle(ROOT.kFullCircle),
+                    ROOT.RooFit.MarkerSize(0.8))
+
+        plot_kwargs = dict(obs=obs, nBins=nBins, xmin=xmin, xmax=xmax, xlabel=xlabel,
+                           plotname=plotname,
+                           n_sig=n_sig, n_bkg=n_bkg,
+                           n_peak_val=n_peak_val, n_peak_err=n_peak_err,
+                           n_nonpeak_val=n_nonpeak_val, n_nonpeak_err=n_nonpeak_err,
+                           ratio_val=r, mass_point=mass_point,
+                           eos_dir="/eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/toys")
+
+        make_toy_plot(frame, doLog=False, **plot_kwargs)
+        make_toy_plot(frame, doLog=True,  **plot_kwargs)
+
+
 if __name__ == "__main__" :
     m1 = 650
     m2 = 1
-    r=0.088
+    r = 0.088 # TODO: make this floating
 
     # Observables
     met = ROOT.RooRealVar("met", "met", 200, 1200)
     mll = ROOT.RooRealVar("m_ll", "m_ll", 60, 120)
 
     # Generate background toys: get the components as well to keep them in scope in Python
-    bkg_expect = 1000
+    bkg_expect = 20
     bkg_strength = 1
     num_bkg_toys = bkg_expect * bkg_strength
     bkg_model, bkg_components = get_background_model(r)
@@ -186,7 +339,7 @@ if __name__ == "__main__" :
     print(bkgtoys_tot)
 
     # Generate signal toys
-    sig_expect = 10
+    sig_expect = 2
     sig_strength = 1
     num_sig_toys = sig_expect * sig_strength
     sig_model, sig_components = get_signal_model(m1=m1, m2=m2)
@@ -207,3 +360,6 @@ if __name__ == "__main__" :
 
     print(f"{nb_comb_fit:.2f}")
     print(f"{ns_comb_fit:.2f}")
+
+    plot_toy_fit(combined_toys, combined_model, comb_result, met, mll,
+                 mass_point=(m1, m2), r=r)
