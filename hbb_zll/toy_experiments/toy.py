@@ -43,9 +43,9 @@ def get_signal_model(m1=650, m2=1):
     return sigtot_mll_met_2dpdf, components
 
 
-def get_background_model(r=0.088):
+def get_background_model():
     """
-    Get the total background model, using a ratio r for the ratio of the peaking background to the total background.
+    Get the total background model, leaving the ratio r (peaking/total) floating.
     """
     # Load results
     bkgresultsfile    = ROOT.TFile.Open("../individual_pdf_fits/individual_fit_results/fitresult_background_all_except_ZPeak.root", "READ")
@@ -75,6 +75,9 @@ def get_background_model(r=0.088):
     bkgnonpeak_mll_met_2dpdf = ROOT.RooProdPdf("bkgnonpeak_mll_met_2dpdf",
                                                 "bkgnonpeak_mll_met_2dpdf",
                                                 ROOT.RooArgList(bkgnonpeak_mll, bkgnonpeak_met))
+
+    # Leave the ratio_peaking floating
+    ratio_peaking = ROOT.RooRealVar("ratio_peaking", "ratio_peaking", 0.088, 0, 1)
 
     # Peaking in m(ll)
     mu_peaking_met = bkg_peaking_result_met.floatParsFinal().find("mu_peaking_met")
@@ -107,11 +110,6 @@ def get_background_model(r=0.088):
                                                 "bkgpeaking_mll_met_2dpdf",
                                                 ROOT.RooArgList(bkgpeaking_mll, bkgpeaking_met))
 
-    # Total background: ratio between peaking and non-peaking is set to r
-    ratio_peaking = ROOT.RooRealVar("ratio_peaking", "ratio_peaking", 0.1, 0, 1)
-    ratio_peaking.setVal(r)
-    ratio_peaking.setConstant(True)
-
     bkgtot_mll_met_2dpdf = ROOT.RooAddPdf("bkgtot_mll_met_2dpdf", "bkgtot_mll_met_2dpdf",
                                            ROOT.RooArgList(bkgpeaking_mll_met_2dpdf,
                                                            bkgnonpeak_mll_met_2dpdf),
@@ -126,47 +124,6 @@ def get_background_model(r=0.088):
         ratio_peaking,
     ]
     return bkgtot_mll_met_2dpdf, components
-
-def gen_toys(met, mll, num_toys, model):
-    """
-    Generate (met, mll) toys for a given model and the given number of toys
-    """
-    toys = model.generate(ROOT.RooArgSet(met, mll), num_toys)
-    return toys
-
-def combine_signal_plus_background_toys(bkg_toys, sig_toys):
-    """
-    Combine signal and background toys and return the sum as its own object
-    """
-    total_toys = bkg_toys.Clone()
-    total_toys.append(sig_toys) 
-    return total_toys
-
-def get_signal_plus_background_model(n_sig, n_bkg, m1=650, m2=1, r=0.088):
-    """
-    Get the signal plus background model for a specific signal mass point and ratio r (peaking background / total background).
-    Uses n_sig and n_bkg as the signal and background yields.
-    """
-    bkg_model, bkg_components = get_background_model(r)
-    sig_model, sig_components = get_signal_model(m1, m2)
-    n_sig_var = ROOT.RooRealVar("n_sig", "n_sig", n_sig, 0, n_sig * 20)
-    n_bkg_var = ROOT.RooRealVar("n_bkg", "n_bkg", n_bkg, 0, n_bkg * 20)
-    total_model = ROOT.RooAddPdf("sig_bkg_2dpdf", "sig_bkg_2dpdf",
-                                 ROOT.RooArgList(bkg_model, sig_model),
-                                 ROOT.RooArgList(n_bkg_var, n_sig_var))
-    total_components = bkg_components + sig_components + [bkg_model, sig_model, n_sig_var, n_bkg_var]
-    return total_model, total_components
-
-def do_combined_fit(model, toys):
-    """
-    Fit toys to model and analyze results.
-    """
-    result = model.fitTo(toys, ROOT.RooFit.Save(), ROOT.RooFit.SumW2Error(False))
-    print("\n=== Fit result ===")
-    result.Print("v")
-    print(f"Fit status: {result.status()}  (0 = OK)")
-    print(f"EDM:        {result.edm():.3e}")
-    return result
 
 def make_toy_plot(frame, obs, nBins, xmin, xmax, xlabel, plotname, doLog,
                   n_sig, n_bkg, n_peak_val, n_peak_err, n_nonpeak_val, n_nonpeak_err,
@@ -212,14 +169,14 @@ def make_toy_plot(frame, obs, nBins, xmin, xmax, xlabel, plotname, doLog,
     leg.SetTextSize(0.035)
     leg.AddEntry(frame.findObject("data"),        "Toy data", "PE")
     leg.AddEntry(frame.findObject("total"),       "Total model", "L")
-    leg.AddEntry(frame.findObject("signal"),      f"Signal ({m1}, {m2}) GeV (n_{{sig}} = {n_sig.getVal():.2f} +/- {n_sig.getError():.2f})", "L")
+    # leg.AddEntry(frame.findObject("signal"),      f"Signal ({m1}, {m2}) GeV (n_{{sig}} = {n_sig.getVal():.2f} +/- {n_sig.getError():.2f})", "L")
     leg.AddEntry(frame.findObject("bkg_peaking"), f"Peaking background (n_{{peak}} = {n_peak_val:.2f} +/- {n_peak_err:.2f})", "L")
     leg.AddEntry(frame.findObject("bkg_nonpeak"), f"Non-peaking background (n_{{nonpeak}} = {n_nonpeak_val:.2f} +/- {n_nonpeak_err:.2f})", "L")
     r_dummy = ROOT.TLine()
     r_dummy.SetLineWidth(0)
     r_dummy.SetLineColor(0)
     leg.AddEntry(r_dummy, f"n_{{bkg}} = {n_bkg.getVal():.2f} +/- {n_bkg.getError():.2f}", "L")
-    leg.AddEntry(r_dummy, f"Ratio r (peaking / total) = {ratio_val:.3f} (fixed)", "L")
+    leg.AddEntry(r_dummy, f"Ratio r (peaking / total) = {ratio_val:.3f}", "L")
 
     frame.Draw("SAME")
 
@@ -243,7 +200,7 @@ def make_toy_plot(frame, obs, nBins, xmin, xmax, xlabel, plotname, doLog,
         os.system(f"mv {plotname}.png {eos_dir}/")
 
 
-def plot_toy_fit(toys, model, result, met, mll, mass_point, r=0.088,
+def plot_toy_fit(toys, model, result, met, mll, mass_point,
                  plotname_prefix="toy_fit", eos_dir="."):
     """
     Plot 1D projections of the toy dataset with the best-fit model overlaid,
@@ -251,15 +208,17 @@ def plot_toy_fit(toys, model, result, met, mll, mass_point, r=0.088,
     """
     n_sig = result.floatParsFinal().find("n_sig")
     n_bkg = result.floatParsFinal().find("n_bkg")
+    ratio_peaking = result.floatParsFinal().find("ratio_peaking")
 
-    n_sig_val     = n_sig.getVal()
+    # n_sig_val     = n_sig.getVal()
     n_bkg_val     = n_bkg.getVal()
     n_bkg_err     = n_bkg.getError()
-    n_tot_val     = n_sig_val + n_bkg_val
-    n_peak_val    = n_bkg_val * r
-    n_nonpeak_val = n_bkg_val * (1 - r)
-    n_peak_err    = n_bkg_err * r
-    n_nonpeak_err = n_bkg_err * (1 - r)
+    # n_tot_val     = n_sig_val + n_bkg_val
+    n_tot_val = n_bkg_val # TODO: fix this
+    n_peak_val    = n_bkg_val * ratio_peaking.getVal()
+    n_nonpeak_val = n_bkg_val * (1 - ratio_peaking.getVal())
+    n_peak_err    = n_bkg_err * ratio_peaking.getVal()
+    n_nonpeak_err = n_bkg_err * (1 - ratio_peaking.getVal())
 
     obs_configs = [
         (mll, 40,  60.,  120., "m(ll) [GeV]", f"mll_{plotname_prefix}"),
@@ -275,13 +234,13 @@ def plot_toy_fit(toys, model, result, met, mll, mass_point, r=0.088,
                      ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#9c9ca1")),
                      ROOT.RooFit.LineWidth(2))
 
-        model.plotOn(frame,
-                     ROOT.RooFit.Components("sigtot_mll_met_2dpdf"),
-                     ROOT.RooFit.Name("signal"),
-                     ROOT.RooFit.Normalization(n_tot_val, ROOT.RooAbsReal.NumEvent),
-                     ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#bd1f01")),
-                     ROOT.RooFit.LineStyle(ROOT.kDashed),
-                     ROOT.RooFit.LineWidth(2))
+        # model.plotOn(frame,
+        #              ROOT.RooFit.Components("sigtot_mll_met_2dpdf"),
+        #              ROOT.RooFit.Name("signal"),
+        #              ROOT.RooFit.Normalization(n_tot_val, ROOT.RooAbsReal.NumEvent),
+        #              ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#bd1f01")),
+        #              ROOT.RooFit.LineStyle(ROOT.kDashed),
+        #              ROOT.RooFit.LineWidth(2))
 
         model.plotOn(frame,
                      ROOT.RooFit.Components("bkgpeaking_mll_met_2dpdf"),
@@ -312,7 +271,7 @@ def plot_toy_fit(toys, model, result, met, mll, mass_point, r=0.088,
                            n_sig=n_sig, n_bkg=n_bkg,
                            n_peak_val=n_peak_val, n_peak_err=n_peak_err,
                            n_nonpeak_val=n_nonpeak_val, n_nonpeak_err=n_nonpeak_err,
-                           ratio_val=r, mass_point=mass_point,
+                           ratio_val=ratio_peaking.getVal(), mass_point=mass_point,
                            eos_dir="/eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/toys")
 
         make_toy_plot(frame, doLog=False, **plot_kwargs)
@@ -322,44 +281,62 @@ def plot_toy_fit(toys, model, result, met, mll, mass_point, r=0.088,
 if __name__ == "__main__" :
     m1 = 650
     m2 = 1
-    r = 0.088 # TODO: make this floating
 
     # Observables
     met = ROOT.RooRealVar("met", "met", 200, 1200)
     mll = ROOT.RooRealVar("m_ll", "m_ll", 60, 120)
 
-    # Generate background toys: get the components as well to keep them in scope in Python
-    bkg_expect = 20
-    bkg_strength = 1
-    num_bkg_toys = bkg_expect * bkg_strength
-    bkg_model, bkg_components = get_background_model(r)
-    bkg_toys = gen_toys(met, mll, num_bkg_toys, bkg_model)
-    print(bkg_toys, type(bkg_toys))
-    bkgtoys_tot = bkg_toys.sumEntries()
-    print(bkgtoys_tot)
+    # Generate background and signal toys in the same function
+    n_toys = 200
 
-    # Generate signal toys
-    sig_expect = 2
-    sig_strength = 1
-    num_sig_toys = sig_expect * sig_strength
-    sig_model, sig_components = get_signal_model(m1=m1, m2=m2)
-    sig_toys = gen_toys(met, mll, num_sig_toys, sig_model)
+    # Get the background plus signal model
+    n_sig_in = 0
+    n_bkg_in = 100
+    n_sig = ROOT.RooRealVar("n_sig", "n_sig", n_sig_in, -1, n_toys*5)
+    n_bkg = ROOT.RooRealVar("n_bkg", "n_bkg", n_bkg_in, 0, n_toys*5)
 
-    sigtoys_tot = sig_toys.sumEntries()
-    print(sigtoys_tot)
+    bkg_model, bkg_components = get_background_model()
+    sig_model, sig_components = get_signal_model(m1, m2)
+    # model = ROOT.RooAddPdf("total_pdf", "total_pdf",
+    #                              ROOT.RooArgList(sig_model, bkg_model),
+    #                              ROOT.RooArgList(n_sig, n_bkg))
+    model = ROOT.RooAddPdf("total_pdf", "total_pdf",
+                                 ROOT.RooArgList(bkg_model),
+                                 ROOT.RooArgList(n_bkg))                             
+    ROOT.RooRandom.randomGenerator().SetSeed(0)
+    toys = model.generate(ROOT.RooArgSet(met, mll), n_toys)
 
-    # Make signal plus background toys, model, and fit
-    combined_toys = combine_signal_plus_background_toys(bkg_toys, sig_toys)
-    combined_model, combined_components = get_signal_plus_background_model(num_sig_toys, num_bkg_toys, m1, m2, r)
-    print(combined_toys)
-    comb_result = do_combined_fit(combined_model, combined_toys)
+    result = model.fitTo(toys, ROOT.RooFit.Save(True))
 
-    # Analyze results
-    nb_comb_fit = ufloat(comb_result.floatParsFinal().find("n_bkg").getVal(), comb_result.floatParsFinal().find("n_bkg").getError())
-    ns_comb_fit = ufloat(comb_result.floatParsFinal().find("n_sig").getVal(), comb_result.floatParsFinal().find("n_sig").getError())
+    # Plot 
+    met_frame = met.frame()
+    toys.plotOn(met_frame)
+    model.plotOn(met_frame)
+    model.plotOn(met_frame, ROOT.RooFit.Components("total_pdf"), ROOT.RooFit.LineStyle(ROOT.kDashed))
+    canv = ROOT.TCanvas("canv", "canv", 800, 600)
+    met_frame.Draw()
+    canv.SaveAs("test.pdf")
+    canv.SaveAs("test.png")
+    os.system("mv test.* /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/toys")
 
-    print(f"{nb_comb_fit:.2f}")
-    print(f"{ns_comb_fit:.2f}")
 
-    plot_toy_fit(combined_toys, combined_model, comb_result, met, mll,
-                 mass_point=(m1, m2), r=r)
+    n_sig.Print()
+    n_bkg.Print()
+
+    # print("\n=== Fit result ===")
+    # result.Print("v")
+    # print(f"Fit status: {result.status()}  (0 = OK)")
+    # print(f"EDM:        {result.edm():.3e}")
+
+    # nb_comb_fit = ufloat(result.floatParsFinal().find("n_bkg").getVal(), result.floatParsFinal().find("n_bkg").getError())
+    # ns_comb_fit = ufloat(result.floatParsFinal().find("n_sig").getVal(), result.floatParsFinal().find("n_sig").getError())
+
+    # print(f"{nb_comb_fit:.2f}")
+    # print(f"{ns_comb_fit:.2f}")
+
+    plot_toy_fit(toys, model, result, met, mll,
+                 mass_point=(m1, m2))
+
+    # #  Pull:
+    # n_sig_pull = (result.floatParsFinal().find("n_sig").getVal() - n_sig_in) / result.floatParsFinal().find("n_sig").getError()
+    # print(f"Signal pull: {n_sig_pull}")
