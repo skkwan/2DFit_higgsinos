@@ -6,12 +6,19 @@ from uncertainties import ufloat
 def get_signal_model(m1=650, m2=1):
     """
     Get the signal model for a given mass point.
+    Returns (pdf, ws_met, components) where ws_met is the workspace's MET observable —
+    the caller must use ws_met everywhere so the spline PDF is properly connected.
     """
     # Load results
     signalresultsfile = ROOT.TFile.Open(f"../individual_pdf_fits/individual_fit_results/fitresult_signal_{m1}_{m2}.root", "READ")
 
     workspace              = signalresultsfile.Get(f"workspace_{m1}_{m2}")
     sig_result             = signalresultsfile.Get("sig_result")
+
+    # Use the workspace's own met variable; creating a new RooRealVar("met") would be a
+    # different object, leaving the spline disconnected and returning a constant in fits.
+    ws_met = workspace.var("met")
+    ws_met.setRange(200, 1200)
 
     # sigtot_mll_met_2dpdf = sig_dcb_mll (mll) x pdf_of_spline (MET)
     mean_mll   = sig_result.floatParsFinal().find(f"mean_mll_{m1}_{m2}")
@@ -34,16 +41,16 @@ def get_signal_model(m1=650, m2=1):
                                             ROOT.RooArgList(sig_dcb_mll, pdf_of_spline))
 
     components = [
-        signalresultsfile, 
+        signalresultsfile,
         workspace,
-        sig_result, mean_mll, sigmal_mll, sigmar_mll, alphal_mll, alphar_mll, nl_mll, nr_mll, 
-        sig_dcb_mll, pdf_of_spline, 
+        sig_result, mean_mll, sigmal_mll, sigmar_mll, alphal_mll, alphar_mll, nl_mll, nr_mll,
+        sig_dcb_mll, pdf_of_spline,
     ]
 
-    return sigtot_mll_met_2dpdf, components
+    return sigtot_mll_met_2dpdf, ws_met, components
 
 
-def get_background_model():
+def get_background_model(met):
     """
     Get the total background model, leaving the ratio r (peaking/total) floating.
     """
@@ -169,7 +176,7 @@ def make_toy_plot(frame, obs, nBins, xmin, xmax, xlabel, plotname, doLog,
     leg.SetTextSize(0.035)
     leg.AddEntry(frame.findObject("data"),        "Toy data", "PE")
     leg.AddEntry(frame.findObject("total"),       "Total model", "L")
-    # leg.AddEntry(frame.findObject("signal"),      f"Signal ({m1}, {m2}) GeV (n_{{sig}} = {n_sig.getVal():.2f} +/- {n_sig.getError():.2f})", "L")
+    leg.AddEntry(frame.findObject("signal"),      f"Signal ({m1}, {m2}) GeV (n_{{sig}} = {n_sig.getVal():.2f} +/- {n_sig.getError():.2f})", "L")
     leg.AddEntry(frame.findObject("bkg_peaking"), f"Peaking background (n_{{peak}} = {n_peak_val:.2f} +/- {n_peak_err:.2f})", "L")
     leg.AddEntry(frame.findObject("bkg_nonpeak"), f"Non-peaking background (n_{{nonpeak}} = {n_nonpeak_val:.2f} +/- {n_nonpeak_err:.2f})", "L")
     r_dummy = ROOT.TLine()
@@ -210,11 +217,11 @@ def plot_toy_fit(toys, model, result, met, mll, mass_point,
     n_bkg = result.floatParsFinal().find("n_bkg")
     ratio_peaking = result.floatParsFinal().find("ratio_peaking")
 
-    # n_sig_val     = n_sig.getVal()
+    n_sig_val     = n_sig.getVal()
     n_bkg_val     = n_bkg.getVal()
     n_bkg_err     = n_bkg.getError()
-    # n_tot_val     = n_sig_val + n_bkg_val
-    n_tot_val = n_bkg_val # TODO: fix this
+    n_tot_val     = n_sig_val + n_bkg_val
+    # n_tot_val = n_bkg_val # TODO: fix this
     n_peak_val    = n_bkg_val * ratio_peaking.getVal()
     n_nonpeak_val = n_bkg_val * (1 - ratio_peaking.getVal())
     n_peak_err    = n_bkg_err * ratio_peaking.getVal()
@@ -234,13 +241,13 @@ def plot_toy_fit(toys, model, result, met, mll, mass_point,
                      ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#9c9ca1")),
                      ROOT.RooFit.LineWidth(2))
 
-        # model.plotOn(frame,
-        #              ROOT.RooFit.Components("sigtot_mll_met_2dpdf"),
-        #              ROOT.RooFit.Name("signal"),
-        #              ROOT.RooFit.Normalization(n_tot_val, ROOT.RooAbsReal.NumEvent),
-        #              ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#bd1f01")),
-        #              ROOT.RooFit.LineStyle(ROOT.kDashed),
-        #              ROOT.RooFit.LineWidth(2))
+        model.plotOn(frame,
+                     ROOT.RooFit.Components("sigtot_mll_met_2dpdf"),
+                     ROOT.RooFit.Name("signal"),
+                     ROOT.RooFit.Normalization(n_tot_val, ROOT.RooAbsReal.NumEvent),
+                     ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#bd1f01")),
+                     ROOT.RooFit.LineStyle(ROOT.kDashed),
+                     ROOT.RooFit.LineWidth(2))
 
         model.plotOn(frame,
                      ROOT.RooFit.Components("bkgpeaking_mll_met_2dpdf"),
@@ -283,26 +290,28 @@ if __name__ == "__main__" :
     m2 = 1
 
     # Observables
-    met = ROOT.RooRealVar("met", "met", 200, 1200)
     mll = ROOT.RooRealVar("m_ll", "m_ll", 60, 120)
 
+    # Load signal model first so we can use the workspace's met variable everywhere.
+    # Creating a separate RooRealVar("met") would disconnect the spline PDF from met.
+    sig_model, met, sig_components = get_signal_model(m1, m2)
+
     # Generate background and signal toys in the same function
-    n_toys = 200
+    n_toys = 500
 
     # Get the background plus signal model
     n_sig_in = 0
-    n_bkg_in = 100
-    n_sig = ROOT.RooRealVar("n_sig", "n_sig", n_sig_in, -1, n_toys*5)
-    n_bkg = ROOT.RooRealVar("n_bkg", "n_bkg", n_bkg_in, 0, n_toys*5)
+    n_bkg_in = 20
+    n_sig = ROOT.RooRealVar("n_sig", "n_sig", 0, 0, n_toys*5)
+    n_bkg = ROOT.RooRealVar("n_bkg", "n_bkg", 20, 0, n_toys*5)
 
-    bkg_model, bkg_components = get_background_model()
-    sig_model, sig_components = get_signal_model(m1, m2)
-    # model = ROOT.RooAddPdf("total_pdf", "total_pdf",
-    #                              ROOT.RooArgList(sig_model, bkg_model),
-    #                              ROOT.RooArgList(n_sig, n_bkg))
+    bkg_model, bkg_components = get_background_model(met)
     model = ROOT.RooAddPdf("total_pdf", "total_pdf",
-                                 ROOT.RooArgList(bkg_model),
-                                 ROOT.RooArgList(n_bkg))                             
+                                 ROOT.RooArgList(sig_model, bkg_model),
+                                 ROOT.RooArgList(n_sig, n_bkg))
+    # model = ROOT.RooAddPdf("total_pdf", "total_pdf",
+    #                              ROOT.RooArgList(bkg_model),
+    #                              ROOT.RooArgList(n_bkg))                             
     ROOT.RooRandom.randomGenerator().SetSeed(0)
     toys = model.generate(ROOT.RooArgSet(met, mll), n_toys)
 
@@ -322,6 +331,31 @@ if __name__ == "__main__" :
 
     n_sig.Print()
     n_bkg.Print()
+
+    # --- NLL comparison diagnostic ---
+    nll = model.createNLL(toys)
+
+    # NLL at the found minimum (n_sig≈N, n_bkg≈0)
+    nll_at_minimum = nll.getVal()
+    print(f"\nNLL at fit minimum (n_sig={n_sig.getVal():.2f}, n_bkg={n_bkg.getVal():.4f}): {nll_at_minimum:.4f}")
+
+    # NLL at the truth point (n_sig=0, n_bkg≈N)
+    n_sig.setVal(0.0)
+    n_bkg.setVal(n_toys)
+    nll_at_truth = nll.getVal()
+    print(f"NLL at truth point  (n_sig=0, n_bkg={n_toys}): {nll_at_truth:.4f}")
+    print(f"Delta NLL (truth - minimum): {nll_at_truth - nll_at_minimum:.4f}")
+
+    # Also check signal spline value at a low-MET point
+    print("\n--- Signal spline values ---")
+    sig_spline = sig_components[11]  # pdf_of_spline
+    for test_met in [250, 350, 500, 700]:
+        met.setVal(test_met)
+        print(f"  pdf_of_spline at MET={test_met}: {sig_spline.getVal():.6e}")
+
+    # Restore fit values
+    n_sig.setVal(result.floatParsFinal().find("n_sig").getVal())
+    n_bkg.setVal(result.floatParsFinal().find("n_bkg").getVal())
 
     # print("\n=== Fit result ===")
     # result.Print("v")
