@@ -130,7 +130,7 @@ def get_background_model(met):
         bkgpeaking_met, bkgpeaking_mll, bkgpeaking_mll_met_2dpdf,
         ratio_peaking,
     ]
-    return bkgtot_mll_met_2dpdf, components
+    return bkgtot_mll_met_2dpdf, components, ratio_peaking
 
 def make_toy_plot(frame, obs, nBins, xmin, xmax, xlabel, plotname, doLog,
                   n_sig, n_bkg, n_peak_val, n_peak_err, n_nonpeak_val, n_nonpeak_err,
@@ -170,7 +170,7 @@ def make_toy_plot(frame, obs, nBins, xmin, xmax, xlabel, plotname, doLog,
         ROOT.gPad.SetLogy()
 
     m1, m2 = mass_point
-    leg = ROOT.TLegend(0.25, 0.50, 0.90, 0.90)
+    leg = ROOT.TLegend(0.25, 0.45, 0.90, 0.90)
     leg.SetBorderSize(0)
     leg.SetFillStyle(0)
     leg.SetTextSize(0.035)
@@ -199,7 +199,9 @@ def make_toy_plot(frame, obs, nBins, xmin, xmax, xlabel, plotname, doLog,
     CMS.cmsObjectDraw(leg)
     CMS.UpdatePad(canv)
 
-    canv.SaveAs(f"{plotname}.pdf")
+    canv.SaveAs(f"{plotname}.eps")
+    os.system(f"gs -q -dBATCH -dNOPAUSE -dSAFER -dEPSCrop -dPDFSETTINGS=/prepress -sDEVICE=pdfwrite "
+              f"-dEmbedAllFonts=true -dSubsetFonts=true -sOutputFile={plotname}.pdf {plotname}.eps && rm {plotname}.eps")
     canv.SaveAs(f"{plotname}.png")
     print(f"Created {plotname}.pdf / .png")
     if eos_dir != ".":
@@ -221,7 +223,6 @@ def plot_toy_fit(toys, model, result, met, mll, mass_point,
     n_bkg_val     = n_bkg.getVal()
     n_bkg_err     = n_bkg.getError()
     n_tot_val     = n_sig_val + n_bkg_val
-    # n_tot_val = n_bkg_val # TODO: fix this
     n_peak_val    = n_bkg_val * ratio_peaking.getVal()
     n_nonpeak_val = n_bkg_val * (1 - ratio_peaking.getVal())
     n_peak_err    = n_bkg_err * ratio_peaking.getVal()
@@ -285,6 +286,75 @@ def plot_toy_fit(toys, model, result, met, mll, mass_point,
         make_toy_plot(frame, doLog=True,  **plot_kwargs)
 
 
+def make_pull_plot(pull_vals, param_name, n_sig_in, n_bkg_in, n_experiments, mass_point, eos_dir="."):
+    m1, m2 = mass_point
+
+    pull_var = ROOT.RooRealVar("pull", "pull", -5, 5)
+    pull_ds  = ROOT.RooDataSet("pull_ds", "pull_ds", ROOT.RooArgSet(pull_var))
+    for v in pull_vals:
+        if -5 < v < 5:
+            pull_var.setVal(v)
+            pull_ds.add(ROOT.RooArgSet(pull_var))
+
+    pull_frame = pull_var.frame(ROOT.RooFit.Bins(30), ROOT.RooFit.Range(-5, 5), ROOT.RooFit.Title(""))
+    pull_ds.plotOn(pull_frame,
+                   ROOT.RooFit.Name("pull_data"),
+                   ROOT.RooFit.MarkerColor(ROOT.kBlack),
+                   ROOT.RooFit.LineColor(ROOT.kBlack),
+                   ROOT.RooFit.MarkerStyle(ROOT.kFullCircle),
+                   ROOT.RooFit.MarkerSize(0.8))
+
+    mean_fit  = ROOT.RooRealVar("mean_fit",  "mean_fit",  0,   -3, 3)
+    sigma_fit = ROOT.RooRealVar("sigma_fit", "sigma_fit", 1, 0.1, 5)
+    gauss     = ROOT.RooGaussian("gauss", "gauss", pull_var, mean_fit, sigma_fit)
+    gauss.fitTo(pull_ds, ROOT.RooFit.PrintLevel(-1))
+    gauss.plotOn(pull_frame,
+                 ROOT.RooFit.Name("gaus_fit"),
+                 ROOT.RooFit.LineWidth(1),
+                 ROOT.RooFit.LineColor(ROOT.TColor.GetColor("#5790fc")))
+
+    CMS.SetExtraText("Private work")
+    CMS.SetCmsText("CMS", font=62, size=0.76)
+    CMS.SetLumi(250, unit="fb", run="2018")
+
+    y_max = pull_frame.GetMaximum() * 1.4
+    canv = CMS.cmsCanvas(f"canv_{param_name}_pull",
+                          x_min=-5, x_max=5, y_min=0, y_max=y_max,
+                          nameXaxis=f"({param_name} #minus {param_name}^{{in}}) / #sigma_{{fit}}",
+                          nameYaxis="Toys",
+                          square=True, extraSpace=0.01, iPos=0.)
+    canv.SetRightMargin(0.05)
+    CMS.UpdatePad(canv)
+
+    pull_frame.Draw("SAME")
+
+    x = 0.15
+    leg = ROOT.TLegend(x, 0.68, x+0.80, 0.88)
+    leg.SetNColumns(2)
+    leg.SetBorderSize(0)
+    leg.SetFillStyle(0)
+    leg.SetTextSize(0.035)
+    leg.AddEntry(ROOT.nullptr, f"Signal ({m1}, {m2}) GeV", "")
+    leg.AddEntry(ROOT.nullptr, f"#mu = {mean_fit.getVal():.3f} #pm {mean_fit.getError():.3f}", "")
+    leg.AddEntry(ROOT.nullptr, f"N_{{toys}} = {n_experiments}", "")
+    leg.AddEntry(ROOT.nullptr, f"#sigma = {sigma_fit.getVal():.3f} #pm {sigma_fit.getError():.3f}", "")
+    leg.AddEntry(ROOT.nullptr, f"n_{{sig}}^{{in}} = {n_sig_in},  n_{{bkg}}^{{in}} = {n_bkg_in}", "")
+    leg.AddEntry(pull_frame.findObject("gaus_fit"), "Gaussian fit", "l")
+    CMS.cmsObjectDraw(leg)
+    CMS.UpdatePad(canv)
+
+    plotname = f"pull_{param_name}"
+
+    canv.SaveAs(f"{plotname}.eps")
+    os.system(f"gs -q -dBATCH -dNOPAUSE -dSAFER -dEPSCrop -dPDFSETTINGS=/prepress -sDEVICE=pdfwrite "
+              f"-dEmbedAllFonts=true -dSubsetFonts=true -sOutputFile={plotname}.pdf {plotname}.eps && rm {plotname}.eps")
+
+    canv.SaveAs(f"{plotname}.png")
+    print(f"Created {plotname}.pdf / .png")
+    if eos_dir != ".":
+        os.system(f"mv {plotname}.pdf {plotname}.png {eos_dir}/")
+
+
 if __name__ == "__main__" :
     m1 = 650
     m2 = 1
@@ -297,65 +367,48 @@ if __name__ == "__main__" :
     sig_model, met, sig_components = get_signal_model(m1, m2)
 
     # Generate background and signal toys in the same function
-    n_toys = 500
+    n_experiments = 500
 
     # Get the background plus signal model
     n_sig_in = 0
-    n_bkg_in = 20
-    n_sig = ROOT.RooRealVar("n_sig", "n_sig", 0, 0, n_toys*5)
-    n_bkg = ROOT.RooRealVar("n_bkg", "n_bkg", 20, 0, n_toys*5)
+    n_bkg_in = 22
+    n_sig = ROOT.RooRealVar("n_sig", "n_sig", n_sig_in, -1, (n_sig_in + n_bkg_in)*5)
+    n_bkg = ROOT.RooRealVar("n_bkg", "n_bkg", n_bkg_in, -1, (n_sig_in + n_bkg_in)*5)
 
-    bkg_model, bkg_components = get_background_model(met)
+    bkg_model, bkg_components, ratio_peaking = get_background_model(met)
     model = ROOT.RooAddPdf("total_pdf", "total_pdf",
                                  ROOT.RooArgList(sig_model, bkg_model),
                                  ROOT.RooArgList(n_sig, n_bkg))
-    # model = ROOT.RooAddPdf("total_pdf", "total_pdf",
-    #                              ROOT.RooArgList(bkg_model),
-    #                              ROOT.RooArgList(n_bkg))                             
-    ROOT.RooRandom.randomGenerator().SetSeed(0)
-    toys = model.generate(ROOT.RooArgSet(met, mll), n_toys)
+    ROOT.RooRandom.randomGenerator().SetSeed(1)
 
-    result = model.fitTo(toys, ROOT.RooFit.Save(True))
+    mcs = ROOT.RooMCStudy(
+        model,
+        ROOT.RooArgSet(met, mll),
+        ROOT.RooFit.Extended(),
+        ROOT.RooFit.Silence(),
+        ROOT.RooFit.FitOptions(ROOT.RooFit.Save(True), ROOT.RooFit.PrintLevel(-1)),
+    )
 
-    # Plot 
-    met_frame = met.frame()
-    toys.plotOn(met_frame)
-    model.plotOn(met_frame)
-    model.plotOn(met_frame, ROOT.RooFit.Components("total_pdf"), ROOT.RooFit.LineStyle(ROOT.kDashed))
-    canv = ROOT.TCanvas("canv", "canv", 800, 600)
-    met_frame.Draw()
-    canv.SaveAs("test.pdf")
-    canv.SaveAs("test.png")
-    os.system("mv test.* /eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/toys")
+    print(f"Running {n_experiments} toy experiments (n_sig_in={n_sig_in}, n_bkg_in={n_bkg_in})...")
+    mcs.generateAndFit(n_experiments, keepGenData=True)
+    print("Done.")
 
+    file_results = ROOT.TFile(f"toy_results_{m1}_{m2}_nExp_{n_experiments}_nsig_{n_sig_in}_nbkg_{n_bkg_in}.root", "RECREATE")
+    for i in range(n_experiments):
+        mcs.fitResult(i).Write(f"fitResult_{i}")
+    file_results.Close()
 
-    n_sig.Print()
-    n_bkg.Print()
+    eos_dir = "/eos/user/s/skkwan/www/higgsino/studies/mll-MET-fit-2D/toys"
+    for param, pname in [(n_sig, "n_sig"), (n_bkg, "n_bkg"), (ratio_peaking, "ratio_peaking")]:
+        make_pull_plot(mcs, param, pname,
+                       n_sig_in=n_sig_in, n_bkg_in=n_bkg_in,
+                       n_experiments=n_experiments,
+                       mass_point=(m1, m2),
+                       eos_dir=eos_dir)
 
-    # --- NLL comparison diagnostic ---
-    nll = model.createNLL(toys)
-
-    # NLL at the found minimum (n_sig≈N, n_bkg≈0)
-    nll_at_minimum = nll.getVal()
-    print(f"\nNLL at fit minimum (n_sig={n_sig.getVal():.2f}, n_bkg={n_bkg.getVal():.4f}): {nll_at_minimum:.4f}")
-
-    # NLL at the truth point (n_sig=0, n_bkg≈N)
-    n_sig.setVal(0.0)
-    n_bkg.setVal(n_toys)
-    nll_at_truth = nll.getVal()
-    print(f"NLL at truth point  (n_sig=0, n_bkg={n_toys}): {nll_at_truth:.4f}")
-    print(f"Delta NLL (truth - minimum): {nll_at_truth - nll_at_minimum:.4f}")
-
-    # Also check signal spline value at a low-MET point
-    print("\n--- Signal spline values ---")
-    sig_spline = sig_components[11]  # pdf_of_spline
-    for test_met in [250, 350, 500, 700]:
-        met.setVal(test_met)
-        print(f"  pdf_of_spline at MET={test_met}: {sig_spline.getVal():.6e}")
-
-    # Restore fit values
-    n_sig.setVal(result.floatParsFinal().find("n_sig").getVal())
-    n_bkg.setVal(result.floatParsFinal().find("n_bkg").getVal())
+    # Plot a random toy fit
+    plot_toy_fit(mcs.genData(1), model, mcs.fitResult(1), met, mll,
+                 mass_point=(m1, m2), eos_dir=eos_dir)
 
     # print("\n=== Fit result ===")
     # result.Print("v")
@@ -368,8 +421,8 @@ if __name__ == "__main__" :
     # print(f"{nb_comb_fit:.2f}")
     # print(f"{ns_comb_fit:.2f}")
 
-    plot_toy_fit(toys, model, result, met, mll,
-                 mass_point=(m1, m2))
+    # plot_toy_fit(toys, model, result, met, mll,
+    #              mass_point=(m1, m2))
 
     # #  Pull:
     # n_sig_pull = (result.floatParsFinal().find("n_sig").getVal() - n_sig_in) / result.floatParsFinal().find("n_sig").getError()
