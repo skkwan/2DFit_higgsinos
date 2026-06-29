@@ -303,8 +303,8 @@ if __name__ == "__main__" :
     # Get the background plus signal model
     n_sig_in = 0
     n_bkg_in = 22
-    n_sig = ROOT.RooRealVar("n_sig", "n_sig", n_sig_in, -1*(n_sig_in + n_bkg_in), (n_sig_in + n_bkg_in)*5)
-    n_bkg = ROOT.RooRealVar("n_bkg", "n_bkg", n_bkg_in, -1*(n_sig_in + n_bkg_in), (n_sig_in + n_bkg_in)*5)
+    n_sig = ROOT.RooRealVar("n_sig", "n_sig", n_sig_in, -5*(n_sig_in + n_bkg_in), (n_sig_in + n_bkg_in)*5)
+    n_bkg = ROOT.RooRealVar("n_bkg", "n_bkg", n_bkg_in, -5*(n_sig_in + n_bkg_in), (n_sig_in + n_bkg_in)*5)
 
     bkg_model, bkg_components, ratio_peaking = get_background_model(met)
     model = ROOT.RooAddPdf("total_pdf", "total_pdf",
